@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>주택관리사 학습계획 플래너</title>
+  <meta name="description" content="주택관리사 시험 목표에 맞는 개인별 학습계획을 자동으로 설계해 드립니다." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+  <style>
+    :root {
+      --orange: #ea580c;
+      --orange-dark: #c2410c;
+      --orange-light: #fff7ed;
+      --orange-mid: #fed7aa;
+      --amber: #d97706;
+      --green: #10b981;
+      --red: #ef4444;
+      --purple: #7c3aed;
+      --gray-50: #fafaf9;
+      --gray-100: #f5f5f4;
+      --gray-200: #e7e5e4;
+      --gray-400: #a8a29e;
+      --gray-500: #78716c;
+      --gray-700: #44403c;
+      --gray-900: #1c1917;
+      --radius: 12px;
+      --shadow: 0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    header {
+      background: linear-gradient(135deg, #7c2d12 0%, #ea580c 60%, #fb923c 100%);
+      color: #fff;
+      padding: 28px 20px 24px;
+      text-align: center;
+    }
+    header h1 { font-size: clamp(1.4rem, 4vw, 2rem); font-weight: 800; letter-spacing: -.5px; }
+    header p  { margin-top: 6px; opacity: .8; font-size: .95rem; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+    .steps-top { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+    .steps-top .card { margin-bottom: 0; }
+    @media (max-width: 600px) { .steps-top { grid-template-columns: 1fr; } }
+    .exam-banner {
+      background: linear-gradient(135deg, #7c2d12, #ea580c);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .exam-banner .main-date { font-size: clamp(1rem, 3vw, 1.2rem); font-weight: 700; }
+    .exam-banner .sub       { font-size: .8rem; opacity: .75; margin-bottom: 4px; }
+    .exam-banner .dday      { margin-top: 14px; font-size: .9rem; opacity: .9; width: 100%; border-top: 1px solid rgba(255,255,255,.2); padding-top: 12px; }
+    .exam-dates-row { display: flex; gap: 20px; flex-wrap: wrap; flex: 1; }
+    .exam-date-block { min-width: 140px; }
+    .card {
+      background: #fff;
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+    }
+    .card h2 {
+      font-size: 1rem; font-weight: 700; color: var(--orange);
+      display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+    }
+    .step-num {
+      background: var(--orange); color: #fff;
+      width: 26px; height: 26px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: .78rem; font-weight: 800; flex-shrink: 0;
+    }
+    .opt-group { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    @media (max-width: 400px) { .opt-group { grid-template-columns: 1fr; } }
+    .opt-btn {
+      padding: 14px 10px;
+      border: 2px solid var(--gray-200);
+      border-radius: 9px;
+      background: #fff;
+      color: var(--gray-700);
+      cursor: pointer;
+      font-size: .95rem; font-weight: 700;
+      text-align: center;
+      transition: border-color .15s, background .15s, color .15s;
+    }
+    .opt-btn:hover  { border-color: var(--orange); color: var(--orange); }
+    .opt-btn.active { border-color: var(--orange); background: var(--orange); color: #fff; }
+    .opt-btn.disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
+    .hours-group {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    @media (max-width: 400px) { .hours-group { grid-template-columns: repeat(3, 1fr); } }
+    .hours-btn {
+      padding: 12px 6px;
+      border: 2px solid var(--gray-200);
+      border-radius: 9px; background: #fff;
+      color: var(--gray-700); cursor: pointer;
+      font-size: .95rem; font-weight: 700;
+      text-align: center;
+      transition: border-color .15s, background .15s, color .15s;
+    }
+    .hours-btn .sub { font-size: .65rem; font-weight: 400; display: block; margin-top: 2px; color: var(--gray-400); }
+    .hours-btn:hover  { border-color: var(--orange); color: var(--orange); }
+    .hours-btn.active { border-color: var(--orange); background: var(--orange); color: #fff; }
+    .hours-btn.active .sub { color: rgba(255,255,255,.8); }
+    .cal-wrap { user-select: none; }
+    .cal-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 10px; }
+    .cal-nav {
+      background: none; border: 1px solid var(--gray-200); cursor: pointer;
+      font-size: 1rem; color: var(--orange); padding: 4px 10px;
+      border-radius: 7px; transition: background .12s;
+    }
+    .cal-nav:hover { background: var(--orange-light); }
+    .cal-nav:disabled { color: var(--gray-400); cursor: default; border-color: transparent; }
+    .cal-title { font-weight: 700; font-size: .97rem; }
+    .cal-grid  { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .cal-dh { text-align: center; font-size: .68rem; font-weight: 600; color: var(--gray-500); padding: 3px 0; }
+    .cal-dh.sun { color: #ef4444; }
+    .cal-dh.sat { color: var(--orange); }
+    .cal-day { text-align: center; font-size: .85rem; padding: 7px 2px; border-radius: 50%; cursor: pointer; line-height: 1; transition: background .1s; }
+    .cal-day:empty { pointer-events: none; }
+    .cal-day.disabled { color: var(--gray-400); cursor: not-allowed; }
+    .cal-day.sun { color: #ef4444; }
+    .cal-day.sat { color: var(--orange); }
+    .cal-day.today { font-weight: 800; }
+    .cal-day.selected { background: var(--orange) !important; color: #fff !important; font-weight: 700; }
+    .cal-day:not(.disabled):not(.selected):hover { background: var(--orange-light); }
+    .cal-today-btn {
+      display: block; width: 100%; margin-top: 8px;
+      padding: 7px; border: 1px solid var(--gray-200);
+      border-radius: 8px; background: #fff; cursor: pointer;
+      font-size: .85rem; font-weight: 600; color: var(--gray-700);
+      transition: all .12s;
+    }
+    .cal-today-btn:hover { border-color: var(--orange); color: var(--orange); background: var(--orange-light); }
+    .cal-selected-label { margin-top: 8px; font-size: .8rem; color: var(--orange); text-align: center; font-weight: 600; }
+    .hours-hint  { margin-top: 12px; font-size: .84rem; padding: 8px 12px; border-radius: 8px; }
+    .hours-hint.ok   { background: #f0fdf4; color: #15803d; }
+    .hours-hint.warn { background: #fffbeb; color: #b45309; }
+    .btn-gen {
+      width: 100%; padding: 16px;
+      background: var(--orange); color: #fff;
+      border: none; border-radius: var(--radius);
+      font-size: 1.05rem; font-weight: 700;
+      cursor: pointer; letter-spacing: .3px;
+      transition: background .15s, transform .1s;
+      margin-bottom: 32px;
+    }
+    .btn-gen:hover  { background: var(--orange-dark); }
+    .btn-gen:active { transform: scale(.98); }
+    .btn-gen:disabled { background: var(--gray-400); cursor: not-allowed; transform: none; }
+    .results-header {
+      font-size: 1.1rem; font-weight: 700; color: var(--gray-700);
+      margin-bottom: 16px; padding-bottom: 10px;
+      border-bottom: 2px solid var(--gray-200);
+    }
+    .stat-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+    @media (max-width: 500px) { .stat-grid { grid-template-columns: repeat(3, 1fr); } }
+    .stat-item { background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 10px; padding: 14px 12px; text-align: center; }
+    .stat-item .val { font-size: clamp(1.1rem, 2.2vw, 1.7rem); font-weight: 800; color: var(--orange); }
+    .stat-item .lbl { font-size: .72rem; color: var(--gray-500); margin-top: 3px; }
+    .rm-outer { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .rm-grid { display: grid; gap: 6px; margin-bottom: 4px; }
+    .rm-cell {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: space-between;
+      padding: 10px 5px 8px; border-radius: 10px;
+      border: 2px solid var(--gray-200); text-align: center; gap: 4px;
+      background: var(--gray-100); position: relative; min-width: 80px;
+    }
+    .rm-cell.included { border-color: var(--orange); background: var(--orange-light); }
+    .rm-cell.partial  { border-color: var(--amber); background: #fffbeb; }
+    .rm-cell.skipped  { opacity: .4; }
+    .rm-cell:not(:last-child)::after {
+      content: '›';
+      position: absolute; right: -10px; top: 50%;
+      transform: translateY(-50%);
+      width: 14px; text-align: center;
+      font-size: 1.3rem; font-weight: 700; line-height: 1;
+      color: var(--gray-400); z-index: 2; pointer-events: none;
+    }
+    .rm-cell.included:not(:last-child)::after { color: var(--orange); }
+    .rm-cell.partial:not(:last-child)::after  { color: var(--amber); }
+    .rm-cell.done { border-color: var(--green) !important; background: #f0fdf4 !important; }
+    .rm-cell.done:not(:last-child)::after { color: var(--green) !important; }
+    .rm-seq  { font-size: .6rem; font-weight: 800; color: var(--gray-400); }
+    .rm-cell.included .rm-seq { color: var(--orange); }
+    .rm-cell.partial  .rm-seq { color: var(--amber); }
+    .rm-cell.done     .rm-seq { color: var(--green); }
+    .rm-name { font-size: .7rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; width: 100%; }
+    .rm-cnt  { font-size: .62rem; color: var(--gray-500); }
+    .rm-icon { font-size: .88rem; }
+    .rm-stlbl { font-size: .62rem; font-weight: 700; }
+    .rm-chk {
+      margin-top: 5px; width: 100%; padding: 6px 2px;
+      border-radius: 8px; border: 2px solid currentColor;
+      font-size: .68rem; font-weight: 800; cursor: pointer;
+      transition: all .15s; line-height: 1.3;
+      display: flex; align-items: center; justify-content: center; gap: 3px;
+      background: transparent;
+    }
+    .rm-cell.included .rm-chk { color: #fff; background: var(--orange); border-color: var(--orange); }
+    .rm-cell.partial  .rm-chk { color: #fff; background: var(--amber);  border-color: var(--amber); }
+    .rm-cell.done     .rm-chk { color: #fff; background: var(--green);  border-color: var(--green); }
+    .rm-chk:hover { filter: brightness(.93); transform: scale(1.03); }
+    .rm-section-label {
+      font-size: .75rem; font-weight: 700; letter-spacing: .04em;
+      color: var(--gray-500); text-transform: uppercase;
+      padding: 8px 0 4px; display: flex; align-items: center; gap: 6px;
+    }
+    .rm-section-label span { flex: 1; height: 1px; background: var(--gray-200); }
+    .prog-bar-wrap {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px; padding: 10px 14px;
+      background: var(--gray-50); border: 1px solid var(--gray-200);
+      border-radius: 9px; gap: 12px;
+    }
+    .prog-dots { display: flex; gap: 5px; flex-wrap: wrap; }
+    .prog-dot  { width: 13px; height: 13px; border-radius: 50%; background: var(--gray-200); flex-shrink: 0; }
+    .prog-dot.pd-done    { background: var(--green); }
+    .prog-dot.pd-active  { background: var(--orange); }
+    .prog-dot.pd-partial { background: var(--amber); }
+    .prog-dot.pd-skip    { background: var(--gray-200); opacity: .4; }
+    .prog-txt { font-size: .85rem; font-weight: 700; white-space: nowrap; }
+    .prog-reset { padding: 5px 12px; border: 1px solid var(--gray-200); border-radius: 6px; background: #fff; font-size: .75rem; color: var(--gray-500); cursor: pointer; white-space: nowrap; }
+    .prog-reset:hover { border-color: var(--red); color: var(--red); }
+    .study-path { margin-top: 16px; padding: 14px 16px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 10px; }
+    .study-path .sp-label { font-size: .82rem; font-weight: 700; color: #15803d; margin-bottom: 10px; }
+    .sp-scroll { overflow-x: auto; }
+    .sp-items { display: grid; gap: 6px; }
+    .sp-tag {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 10px 6px; border-radius: 10px; border: 2px solid #86efac;
+      background: #dcfce7; color: #166534;
+      font-size: .78rem; font-weight: 700; text-align: center; gap: 3px;
+      position: relative;
+    }
+    .sp-tag:not(:last-child)::after {
+      content: '›'; position: absolute; right: -10px; top: 50%;
+      transform: translateY(-50%); width: 14px; text-align: center;
+      font-size: 1.3rem; font-weight: 700; line-height: 1;
+      color: #16a34a; z-index: 2; pointer-events: none;
+    }
+    .sp-tag .sp-lec { font-size: .65rem; font-weight: 400; opacity: .8; }
+    .skip-note { margin-top: 10px; padding: 10px 14px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 8px; font-size: .8rem; color: var(--gray-500); }
+    .prog-hint { margin-top: 14px; padding: 12px 16px; background: linear-gradient(135deg, var(--orange-light), #f0fdf4); border: 1px solid var(--orange-mid); border-radius: 10px; font-size: .84rem; color: var(--gray-700); text-align: center; line-height: 1.7; }
+    .prog-hint strong { color: var(--orange); }
+    .week-scroll { overflow-x: auto; }
+    table.week { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    table.week th { background: var(--orange); color: #fff; padding: 9px 6px; text-align: center; font-weight: 700; }
+    table.week th:first-child { background: #7c2d12; }
+    table.week th.sun-th { background: #9f1239; }
+    table.week td { padding: 10px 6px; text-align: center; border: 1px solid var(--gray-200); }
+    table.week td.sun-td { background: #fff1f2; }
+    table.week tr:nth-child(even) td { background: var(--gray-50); }
+    table.week tr:nth-child(even) td.sun-td { background: #ffe4e6; }
+    .stag { display: inline-block; padding: 3px 8px; border-radius: 20px; font-size: .72rem; font-weight: 700; white-space: nowrap; }
+    .s0 { background: #fed7aa; color: #9a3412; }
+    .s1 { background: #d1fae5; color: #065f46; }
+    .s2 { background: #ede9fe; color: #4c1d95; }
+    .s3 { background: #dbeafe; color: #1e40af; }
+    .s4 { background: #fce7f3; color: #831843; }
+    .gantt-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .gantt-inner { min-width: 520px; }
+    .gantt-header { display: flex; margin-bottom: 2px; }
+    .gantt-label-col-h { width: 110px; flex-shrink: 0; }
+    .gantt-month-headers { flex: 1; display: grid; }
+    .gantt-month-h { text-align: center; font-size: .72rem; font-weight: 700; color: var(--gray-500); padding: 4px 0; border-left: 1px solid var(--gray-200); }
+    .gantt-body { display: flex; }
+    .gantt-labels { width: 110px; flex-shrink: 0; }
+    .gantt-label-row { display: flex; align-items: center; font-size: .68rem; color: var(--gray-500); font-weight: 600; padding-right: 8px; line-height: 1.25; }
+    .gantt-timeline-area { flex: 1; position: relative; }
+    .gantt-gridlines { position: absolute; inset: 0; display: grid; pointer-events: none; }
+    .gantt-gridline { border-left: 1px solid var(--gray-200); }
+    .gantt-gridline:first-child { border-left: none; }
+    .gantt-bars { position: relative; }
+    .gantt-bar {
+      position: absolute; border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 10px; box-shadow: 0 2px 6px rgba(0,0,0,.15);
+      cursor: pointer; overflow: hidden; transition: filter .15s, box-shadow .15s;
+    }
+    .gantt-bar:hover { filter: brightness(1.12); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+    .gantt-bar span { color: #fff; font-size: .68rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,.18); }
+    #gantt-tooltip { position: fixed; z-index: 9999; background: #1c1917; color: #fff; padding: 6px 13px; border-radius: 8px; font-size: .78rem; font-weight: 600; pointer-events: none; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.3); white-space: nowrap; }
+    .mo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+    .mo-card { border: 1px solid var(--gray-200); border-radius: 10px; overflow: hidden; }
+    .mo-head { background: var(--orange); color: #fff; padding: 9px 14px; font-weight: 700; font-size: .9rem; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .mo-head.exam1-head { background: #7c3aed; }
+    .mo-head.exam2-head { background: #dc2626; }
+    .mo-body { padding: 12px 14px; }
+    .mo-meta { font-size: .76rem; color: var(--gray-500); margin-bottom: 4px; }
+    .mo-item { margin-top: 7px; }
+    .mo-item-label { display: flex; justify-content: space-between; font-size: .8rem; margin-bottom: 3px; }
+    .mo-item-label span:last-child { color: var(--orange); font-weight: 700; }
+    .pb-bg { background: var(--gray-200); border-radius: 3px; height: 6px; overflow: hidden; }
+    .pb { height: 100%; border-radius: 3px; background: var(--orange); }
+    .pb.pb2 { background: var(--purple); }
+    .mo-done { color: var(--green); font-weight: 600; font-size: .83rem; }
+    .milestone-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 12px;
+      font-size: .7rem; font-weight: 700;
+    }
+    .ms-1st { background: rgba(124,58,237,.15); color: #7c3aed; }
+    .ms-2nd { background: rgba(220,38,38,.15); color: #dc2626; }
+    .my-plan-btn {
+      background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.75);
+      border-radius: 12px; padding: 10px 18px; color: #fff; cursor: pointer;
+      text-align: center; transition: all .15s; align-self: center; min-width: 130px;
+    }
+    .my-plan-btn:hover { background: rgba(255,255,255,.32); transform: scale(1.04); }
+    .mpb-tag { display: inline-block; font-size: .62rem; font-weight: 700; letter-spacing: .4px; background: rgba(255,255,255,.25); border-radius: 10px; padding: 2px 8px; margin-bottom: 6px; }
+    .mpb-val    { font-size: .92rem; font-weight: 800; margin-bottom: 4px; }
+    .mpb-action { font-size: .7rem; opacity: .85; }
+    #results { display: none; }
+    .avail-note { font-size: .75rem; color: var(--amber); margin-top: 8px; padding: 6px 10px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🏠 주택관리사 학습계획 플래너</h1>
+  <p>나에게 맞는 최적의 학습계획을 자동으로 설계해 드립니다</p>
+</header>
+<div class="wrap">
+
+  <div class="exam-banner">
+    <div class="exam-dates-row">
+      <div class="exam-date-block">
+        <div class="sub" id="banner-sub1">시험 연도를 선택해주세요</div>
+        <div class="main-date" id="banner-date1">—</div>
+      </div>
+      <div class="exam-date-block" id="banner-block2" style="display:none;">
+        <div class="sub" id="banner-sub2">2차 시험</div>
+        <div class="main-date" id="banner-date2">—</div>
+      </div>
+    </div>
+    <div id="banner-apply" style="text-align:right;"></div>
+    <div class="dday" id="dday-text"></div>
+  </div>
+
+  <div class="steps-top">
+    <div class="card">
+      <h2><span class="step-num">1</span>시험 목표 선택</h2>
+      <div style="font-size:.78rem;color:var(--gray-500);margin-bottom:6px;">시험 연도</div>
+      <div class="opt-group" id="year-group" style="margin-bottom:14px;">
+        <button class="opt-btn" data-v="2026" onclick="pickYear(this)">2026년</button>
+        <button class="opt-btn" data-v="2027" onclick="pickYear(this)">2027년</button>
+      </div>
+      <div style="font-size:.78rem;color:var(--gray-500);margin-bottom:6px;">시험 목표</div>
+      <div class="opt-group" id="target-group">
+        <button class="opt-btn" data-v="1차" onclick="pick(this,'target')">1차</button>
+        <button class="opt-btn" data-v="2차" onclick="pick(this,'target')">2차</button>
+        <button class="opt-btn" data-v="동차" onclick="pick(this,'target')">동차</button>
+      </div>
+      <div id="avail-note" class="avail-note" style="display:none;"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-num">2</span>학습 시작일 선택</h2>
+      <div id="month-grid"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step-num">3</span>하루 학습 가능 시간 선택</h2>
+    <div class="hours-group" id="hours-group"></div>
+    <div id="hours-hint" class="hours-hint" style="display:none;"></div>
+  </div>
+
+  <button class="btn-gen" id="gen-btn" onclick="generate()">학습계획 생성하기 →</button>
+
+  <div id="results">
+    <div class="card">
+      <div class="results-header">📊 나의 학습 현황</div>
+      <div class="stat-grid" id="stat-grid"></div>
+    </div>
+    <div class="card" id="roadmap-card">
+      <div class="results-header">📚 추천 커리큘럼 학습 로드맵</div>
+      <div id="gantt-chart" style="margin-bottom:18px;"></div>
+      <div id="curr-roadmap"></div>
+    </div>
+    <div class="card">
+      <div class="results-header">📅 주간 학습 스케줄</div>
+      <div id="week-table"></div>
+    </div>
+    <div class="card">
+      <div class="results-header">🗓️ 월별 학습 진도</div>
+      <div class="mo-grid" id="mo-grid"></div>
+      <div style="text-align:center;margin-top:18px;">
+        <button id="save-plan-btn" onclick="saveMyPlanWithFeedback(this)" style="
+          background:var(--orange);color:#fff;border:none;border-radius:10px;
+          padding:12px 28px;font-size:.95rem;font-weight:700;cursor:pointer;
+          box-shadow:0 2px 8px rgba(234,88,12,.25);transition:all .3s;">
+          💾 나의 학습계획으로 저장하기
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="right-actions" style="position:fixed;right:12px;z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:stretch;">
+  <div id="my-plan-btn" onclick="goMyPlan()" class="my-plan-btn" style="display:none;
+    background:linear-gradient(135deg,#7c2d12,#ea580c);
+    border-color:rgba(255,255,255,.6);
+    box-shadow:0 4px 16px rgba(234,88,12,.3);"></div>
+</div>
+
+<div id="gantt-tooltip"></div>
+
+<script>
+/* ═══════════════ DATA ═══════════════ */
+const EXAM_1 = { 2026: new Date(2026,5,27), 2027: new Date(2027,5,28) };
+const EXAM_2 = { 2026: new Date(2026,8,19), 2027: new Date(2027,8,20) };
+const TODAY  = new Date();
+const MY_PLAN_KEY = 'jtm_my_plan';
+
+function getExamDate(t, y) {
+  t = t || S.target; y = y || S.year;
+  return (t === '1차') ? EXAM_1[y] : EXAM_2[y];
+}
+
+// 1차 curriculum (3 subjects: 회계원리, 시설개론, 민법)
+const CURRS_1 = [
+  { seq:1, name:'기초이론',               pri:6, total:36,  openM:-7  },
+  { seq:2, name:'기본이론',               pri:1, total:192, openM:-10 },
+  { seq:3, name:'이론완성',               pri:5, total:128, openM:1   },
+  { seq:4, name:'핵심이론&<br>문제풀이',  pri:2, total:192, openM:3   },
+  { seq:5, name:'마무리<br>100선특강',    pri:3, total:24,  openM:6   },
+  { seq:6, name:'동형모의고사',           pri:4, total:36,  openM:6   },
+];
+
+// 2차 curriculum (2 subjects: 관계법규, 관리실무)
+const CURRS_2 = [
+  { seq:1, name:'기초이론',                    pri:7, total:24,  openM:-10 },
+  { seq:2, name:'이론완성(上)',                 pri:5, total:96,  openM:-11 },
+  { seq:3, name:'이론완성(下)',                 pri:6, total:92,  openM:1   },
+  { seq:4, name:'단원별<br>문제풀이(객관식)',   pri:2, total:150, openM:3   },
+  { seq:5, name:'단원별<br>문제풀이(주관식)',   pri:3, total:56,  openM:6   },
+  { seq:6, name:'핵심이론',                    pri:1, total:144, openM:7   },
+  { seq:7, name:'마무리<br>100선특강',         pri:4, total:16,  openM:8   },
+  { seq:8, name:'동형모의고사',                pri:5, total:24,  openM:9   },
+];
+
+// 동차 curriculum (combined, targeting 2차 exam date)
+const CURRS_D = [
+  { seq:1,  name:'[1차]기본이론',          pri:1,  total:192, openM:-10, cat:'1차' },
+  { seq:2,  name:'[1차]핵심&문제풀이',     pri:2,  total:192, openM:3,   cat:'1차' },
+  { seq:3,  name:'[2차]핵심이론',          pri:3,  total:144, openM:7,   cat:'2차' },
+  { seq:4,  name:'[2차]단원별(객관식)',     pri:4,  total:150, openM:3,   cat:'2차' },
+  { seq:5,  name:'[1차]마무리100선',       pri:5,  total:24,  openM:6,   cat:'1차' },
+  { seq:6,  name:'[2차]단원별(주관식)',     pri:6,  total:56,  openM:6,   cat:'2차' },
+  { seq:7,  name:'[1차]동형모의고사',      pri:7,  total:36,  openM:6,   cat:'1차' },
+  { seq:8,  name:'[2차]마무리100선',       pri:8,  total:16,  openM:8,   cat:'2차' },
+  { seq:9,  name:'[2차]동형모의고사',      pri:9,  total:24,  openM:9,   cat:'2차' },
+  { seq:10, name:'[1차]이론완성',          pri:10, total:128, openM:1,   cat:'1차' },
+  { seq:11, name:'[2차]이론완성(上)',       pri:11, total:96,  openM:-11, cat:'2차' },
+  { seq:12, name:'[2차]이론완성(下)',       pri:12, total:92,  openM:1,   cat:'2차' },
+  { seq:13, name:'[1차]기초이론',          pri:13, total:36,  openM:-7,  cat:'1차' },
+  { seq:14, name:'[2차]기초이론',          pri:14, total:24,  openM:-10, cat:'2차' },
+];
+
+function getCurrs() {
+  if (S.target === '1차')  return CURRS_1;
+  if (S.target === '2차')  return CURRS_2;
+  return CURRS_D;
+}
+
+const SUBJECTS = {
+  '1차':  ['회계원리', '시설개론', '민법'],
+  '2차':  ['관계법규', '관리실무'],
+  '동차': ['회계원리', '시설개론', '민법', '관계법규', '관리실무'],
+};
+const SHORT = { '회계원리':'회계원리', '시설개론':'시설개론', '민법':'민법', '관계법규':'관계법규', '관리실무':'관리실무' };
+const REC_HOURS = { '1차':4, '2차':3, '동차':6 };
+
+/* ═══════════════ STATE ═══════════════ */
+const S = { year:null, target:null, startDate:null, hours:null };
+let calYear  = TODAY.getFullYear();
+let calMonth = TODAY.getMonth();
+const CAL_MIN = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate());
+let   calMax  = new Date(2026, 11, 31);
+
+/* ═══════════════ INIT ═══════════════ */
+(function init() {
+  document.getElementById('dday-text').textContent = '연도와 목표를 선택하면 D-day가 표시됩니다';
+  renderCalendar();
+  positionMyPlanBtn();
+
+  const hoursGroup = document.getElementById('hours-group');
+  const hoursData = [
+    { h:3, lbl:'3시간', sub:'' },
+    { h:4, lbl:'4시간', sub:'' },
+    { h:5, lbl:'5시간', sub:'' },
+    { h:6, lbl:'6시간', sub:'' },
+    { h:7, lbl:'6시간+', sub:'이상' },
+  ];
+  hoursData.forEach(({ h, lbl, sub }) => {
+    const btn = document.createElement('button');
+    btn.className = 'hours-btn';
+    btn.dataset.v = h;
+    btn.innerHTML = `${lbl}<span class="sub">${sub || '&nbsp;'}</span>`;
+    btn.onclick = () => pickHours(btn, h);
+    hoursGroup.appendChild(btn);
+  });
+  updateMyPlanBtn();
+})();
+
+/* ═══════════════ AVAILABILITY ═══════════════ */
+function getAvailableTargets(year, startMonth) {
+  const curYear = TODAY.getFullYear();
+  if (year === curYear) {
+    if (startMonth <= 4) return ['1차','2차','동차'];
+    if (startMonth <= 7) return ['2차'];
+    return [];
+  }
+  return ['1차','2차','동차'];
+}
+
+function updateTargetAvailability() {
+  if (!S.year || !S.startDate) return;
+  const startMonth = S.startDate.getMonth() + 1;
+  const avail = getAvailableTargets(S.year, startMonth);
+  const noteEl = document.getElementById('avail-note');
+  document.querySelectorAll('#target-group .opt-btn').forEach(b => {
+    const isAvail = avail.includes(b.dataset.v);
+    b.classList.toggle('disabled', !isAvail);
+    if (!isAvail && S.target === b.dataset.v) {
+      S.target = null;
+      b.classList.remove('active');
+    }
+  });
+  if (avail.length === 0) {
+    noteEl.style.display = '';
+    noteEl.textContent = '⚠️ 선택한 연도의 시험 준비 기간이 지났습니다. 다음 연도를 선택해주세요.';
+  } else if (avail.length < 3) {
+    noteEl.style.display = '';
+    noteEl.textContent = `⚠️ ${S.year}년 ${startMonth}월 시작은 ${avail.join(', ')} 목표만 가능합니다.`;
+  } else {
+    noteEl.style.display = 'none';
+  }
+}
+
+/* ═══════════════ UI HELPERS ═══════════════ */
+function pickYear(btn) {
+  document.getElementById('year-group').querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  S.year = parseInt(btn.dataset.v);
+  calMax = S.year === 2027 ? new Date(2027, 8, 20) : new Date(2026, 8, 19);
+  if (S.startDate && S.startDate > calMax) { S.startDate = null; }
+  renderCalendar();
+  updateBanner();
+  updateTargetAvailability();
+}
+
+function pick(btn, key) {
+  if (btn.classList.contains('disabled')) return;
+  btn.closest('.opt-group').querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  S[key] = btn.dataset.v;
+  updateBanner();
+  updateHoursHint();
+}
+
+function updateBanner() {
+  if (!S.year) return;
+  const BANNER = {
+    2026: {
+      sub1:'2026년 제28회 1차 시험', date1:'시험일 2026년 6월 27일 (토)',
+      sub2:'2026년 제28회 2차 시험', date2:'시험일 2026년 9월 19일 (금)',
+      apply1:'1차 원서접수 2026.05.11~05.15', apply2:'2차 원서접수 2026.08.10~08.14',
+    },
+    2027: {
+      sub1:'2027년 제29회 1차 시험 (예정)', date1:'시험일 2027년 6월 28일 (토) 예정',
+      sub2:'2027년 제29회 2차 시험 (예정)', date2:'시험일 2027년 9월 17일 (목) 예정',
+      apply1:'1차 원서접수 2027년 5월 예정', apply2:'2차 원서접수 2027년 8월 예정',
+    },
+  };
+  const b = BANNER[S.year];
+  document.getElementById('banner-sub1').textContent  = b.sub1;
+  document.getElementById('banner-date1').textContent = b.date1;
+  document.getElementById('banner-sub2').textContent  = b.sub2;
+  document.getElementById('banner-date2').textContent = b.date2;
+
+  const t = S.target;
+  const block2 = document.getElementById('banner-block2');
+  const applyEl = document.getElementById('banner-apply');
+  if (!t || t === '1차') {
+    block2.style.display = 'none';
+    applyEl.innerHTML = `<div style="font-size:.8rem;opacity:.75;margin-bottom:2px;">원서접수</div><div style="font-weight:600;font-size:.88rem;">${b.apply1}</div>`;
+  } else if (t === '2차') {
+    block2.style.display = 'none';
+    document.getElementById('banner-sub1').textContent  = b.sub2;
+    document.getElementById('banner-date1').textContent = b.date2;
+    applyEl.innerHTML = `<div style="font-size:.8rem;opacity:.75;margin-bottom:2px;">원서접수</div><div style="font-weight:600;font-size:.88rem;">${b.apply2}</div>`;
+  } else {
+    block2.style.display = '';
+    document.getElementById('banner-sub1').textContent  = b.sub1;
+    document.getElementById('banner-date1').textContent = b.date1;
+    applyEl.innerHTML = `<div style="font-size:.75rem;opacity:.75;">${b.apply1}</div><div style="font-size:.75rem;opacity:.75;margin-top:3px;">${b.apply2}</div>`;
+  }
+
+  if (S.target) {
+    const examDate = getExamDate();
+    const todayMid = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate());
+    const diff = Math.ceil((examDate - todayMid) / 864e5);
+    const tLbl = S.target === '동차' ? '2차' : S.target;
+    document.getElementById('dday-text').textContent = diff > 0 ? `${tLbl} 시험까지 D-${diff}일` : diff === 0 ? '오늘이 시험일입니다!' : '시험일이 지났습니다.';
+  } else {
+    document.getElementById('dday-text').textContent = '목표를 선택하면 D-day가 표시됩니다';
+  }
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('month-grid');
+  const firstDow = new Date(calYear, calMonth, 1).getDay();
+  const daysInM  = new Date(calYear, calMonth + 1, 0).getDate();
+  const prevDisabled = new Date(calYear, calMonth, 1) <= new Date(CAL_MIN.getFullYear(), CAL_MIN.getMonth(), 1);
+  const nextDisabled = new Date(calYear, calMonth, 1) >= new Date(calMax.getFullYear(), calMax.getMonth(), 1);
+  const monthNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const dayNames   = ['일','월','화','수','목','금','토'];
+
+  let h = `<div class="cal-wrap">
+    <div class="cal-header">
+      <button class="cal-nav" onclick="calNav(-1)" ${prevDisabled?'disabled':''}>←</button>
+      <span class="cal-title">${monthNames[calMonth]} ${calYear}</span>
+      <button class="cal-nav" onclick="calNav(1)" ${nextDisabled?'disabled':''}>→</button>
+    </div>
+    <div class="cal-grid">`;
+  dayNames.forEach((d, i) => {
+    const cls = i===0 ? 'sun' : i===6 ? 'sat' : '';
+    h += `<div class="cal-dh ${cls}">${d}</div>`;
+  });
+  for (let i = 0; i < firstDow; i++) h += `<div class="cal-day"></div>`;
+  for (let d = 1; d <= daysInM; d++) {
+    const date   = new Date(calYear, calMonth, d);
+    const dow    = date.getDay();
+    const isPast = date < CAL_MIN;
+    const isOver = date > calMax;
+    const isTod  = date.getTime() === CAL_MIN.getTime();
+    const isSel  = S.startDate &&
+      date.getFullYear() === S.startDate.getFullYear() &&
+      date.getMonth()    === S.startDate.getMonth() &&
+      date.getDate()     === S.startDate.getDate();
+    const disabled = isPast || isOver;
+    let cls = 'cal-day';
+    if (disabled) cls += ' disabled';
+    else if (isSel) cls += ' selected';
+    if (isTod) cls += ' today';
+    if (dow === 0) cls += ' sun';
+    if (dow === 6) cls += ' sat';
+    const onclick = disabled ? '' : `onclick="pickDate(${calYear},${calMonth},${d})"`;
+    h += `<div class="${cls}" ${onclick}>${d}</div>`;
+  }
+  h += `</div>`;
+  const todayLabel = `${CAL_MIN.getMonth()+1}월 ${CAL_MIN.getDate()}일`;
+  h += `<button class="cal-today-btn" onclick="goToday()">오늘 (${todayLabel})</button>`;
+  if (S.startDate) {
+    const mn  = S.startDate.getMonth() + 1;
+    const dn  = S.startDate.getDate();
+    const day = dayNames[S.startDate.getDay()];
+    h += `<div class="cal-selected-label">📅 시작일: ${mn}월 ${dn}일 (${day})</div>`;
+  }
+  h += `</div>`;
+  grid.innerHTML = h;
+}
+
+function calNav(dir) {
+  calMonth += dir;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+}
+
+function goToday() {
+  calYear  = CAL_MIN.getFullYear();
+  calMonth = CAL_MIN.getMonth();
+  pickDate(calYear, calMonth, CAL_MIN.getDate());
+}
+
+function pickDate(y, m, d) {
+  S.startDate = new Date(y, m, d);
+  calYear = y; calMonth = m;
+  renderCalendar();
+  updateTargetAvailability();
+}
+
+function pickHours(btn, h) {
+  document.querySelectorAll('.hours-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  S.hours = h;
+  updateHoursHint();
+}
+
+function updateHoursHint() {
+  if (!S.target || !S.hours) return;
+  const hint = document.getElementById('hours-hint');
+  const rec  = REC_HOURS[S.target];
+  hint.style.display = '';
+  const tLbl = S.target === '동차' ? '동차' : S.target;
+  if (S.hours < rec) {
+    hint.className = 'hours-hint warn';
+    hint.textContent = `⚠️ ${tLbl} 목표의 권장 학습 시간은 하루 ${rec}시간입니다. 조금 더 시간을 확보해 보세요!`;
+  } else {
+    hint.className = 'hours-hint ok';
+    hint.textContent = `✅ ${tLbl} 목표 권장 시간(${rec}시간) 이상입니다. 훌륭합니다!`;
+  }
+}
+
+function positionMyPlanBtn() {
+  const el = document.getElementById('right-actions');
+  if (!el) return;
+  const headerH = document.querySelector('header')?.offsetHeight || 80;
+  el.style.top = (headerH + 16) + 'px';
+}
+
+/* ═══════════════ AVAILABILITY CHECK ═══════════════ */
+function isOpen(openM, moYear, moMonth, examYear) {
+  if (openM === 0) return true;
+  if (openM < 0) {
+    const priorYear = examYear - 1;
+    const priorMonth = -openM;
+    if (moYear < priorYear) return false;
+    if (moYear > priorYear) return true;
+    return moMonth >= priorMonth;
+  }
+  if (moYear < examYear) return false;
+  if (moYear > examYear) return true;
+  return moMonth >= openM;
+}
+
+/* ═══════════════ PLAN CALCULATION ═══════════════ */
+function buildPlan() {
+  const examDate = getExamDate();
+  const examYear = examDate.getFullYear();
+  const startDate = S.startDate;
+  const startMid = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const totalDays = Math.ceil((examDate - startMid) / 864e5);
+  const lpd = S.hours;
+
+  const CURRS = getCurrs();
+
+  const months = [];
+  let curM = startDate.getMonth() + 1;
+  let curY = startDate.getFullYear();
+  const endM = examDate.getMonth() + 1;
+  const endY = examYear;
+
+  while (curY < endY || (curY === endY && curM <= endM)) {
+    const daysInM  = new Date(curY, curM, 0).getDate();
+    const startDay = (curM === startDate.getMonth()+1 && curY === startDate.getFullYear()) ? startDate.getDate() : 1;
+    const sd = daysInM - startDay + 1;
+    months.push({ m: curM, year: curY, sd, ld: sd, lec: sd * lpd });
+    curM++;
+    if (curM > 12) { curM = 1; curY++; }
+  }
+
+  const capacity = totalDays * lpd;
+  const totalNeeded = CURRS.reduce((s, c) => s + c.total, 0);
+
+  const sorted = CURRS.map(c => ({ ...c, needed: c.total })).sort((a, b) => a.pri - b.pri);
+  let rem = capacity;
+  sorted.forEach(c => {
+    if (rem >= c.needed) { c.status = 'full'; c.effective = c.needed; rem -= c.needed; }
+    else if (rem > 0)    { c.status = 'partial'; c.effective = rem; c.pct = Math.round(rem/c.needed*100); rem = 0; }
+    else                 { c.status = 'skipped'; c.effective = 0; }
+  });
+
+  const result = CURRS.map(orig => sorted.find(c => c.seq === orig.seq));
+  const fullCount = result.filter(c => c.status === 'full').length;
+
+  const effectiveTotal = result.filter(c => c.status !== 'skipped').reduce((s, c) => s + c.effective, 0);
+  const totalCap = months.reduce((s, mo) => s + mo.lec, 0);
+  const contentRatio = (effectiveTotal > 0 && effectiveTotal < totalCap) ? effectiveTotal / totalCap : 1;
+  months.forEach(mo => { mo.contentLec = Math.max(1, Math.round(mo.lec * contentRatio)); });
+
+  const seqActive = result
+    .filter(c => c.status !== 'skipped')
+    .sort((a, b) => a.seq - b.seq)
+    .map(c => ({ seq: c.seq, name: c.name.replace(/<br>/g, ''), remaining: c.effective, openM: c.openM || 0, cat: c.cat }));
+
+  let ci = 0;
+  months.forEach(mo => {
+    while (ci < seqActive.length && seqActive[ci].remaining <= 0) ci++;
+    let cap = mo.contentLec;
+    const sch = [];
+    while (cap > 0) {
+      if (ci >= seqActive.length) {
+        sch.push({ name: '전 과정 최종 복습', pct: Math.round(cap/mo.contentLec*100), rev: true }); break;
+      }
+      if (!isOpen(seqActive[ci].openM, mo.year, mo.m, examYear)) {
+        sch.push({ name: '부족한 과목 복습', pct: Math.round(cap/mo.contentLec*100), rev: true }); break;
+      }
+      const take = Math.min(seqActive[ci].remaining, cap);
+      const pct  = Math.round(take/mo.contentLec*100);
+      if (pct > 0) sch.push({ name: seqActive[ci].name, pct, cat: seqActive[ci].cat });
+      seqActive[ci].remaining -= take;
+      cap -= take;
+      if (seqActive[ci].remaining <= 0) ci++;
+    }
+    mo.schedule = sch;
+  });
+
+  return { totalDays, capacity, totalNeeded, fullCount, result, months, lpd, examYear };
+}
+
+/* ═══════════════ GENERATE ═══════════════ */
+function generate() {
+  if (!S.year || !S.target || !S.startDate || !S.hours) {
+    alert('시험 연도, 목표, 시작일, 학습 시간을 모두 선택해주세요.');
+    return;
+  }
+  const avail = getAvailableTargets(S.year, S.startDate.getMonth()+1);
+  if (!avail.includes(S.target)) {
+    alert('선택한 시작일과 목표의 조합이 올바르지 않습니다. 목표를 다시 확인해주세요.');
+    return;
+  }
+
+  const p = buildPlan();
+  window._plan = p;
+  renderStats(p);
+  renderGantt(p);
+  renderCurriculum(p);
+  renderWeekly(p);
+  renderMonthly(p);
+
+  const el = document.getElementById('results');
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ═══════════════ GANTT ═══════════════ */
+const GANTT_COLORS = [
+  'linear-gradient(90deg,#fb923c,#ea580c)',
+  'linear-gradient(90deg,#fbbf24,#d97706)',
+  'linear-gradient(90deg,#34d399,#059669)',
+  'linear-gradient(90deg,#60a5fa,#2563eb)',
+  'linear-gradient(90deg,#a78bfa,#7c3aed)',
+  'linear-gradient(90deg,#f472b6,#db2777)',
+  'linear-gradient(90deg,#2dd4bf,#0d9488)',
+  'linear-gradient(90deg,#e879f9,#a21caf)',
+];
+
+function renderGantt(p) {
+  const { result, months } = p;
+  if (!months.length) { document.getElementById('gantt-chart').innerHTML = ''; return; }
+
+  const numM = months.length;
+  const ROW_H = 46;
+  const barsMap = new Map();
+  let colorIdx = 0;
+
+  months.forEach((mo, mi) => {
+    let cumFrac = 0;
+    (mo.schedule || []).forEach(item => {
+      const f = item.pct / 100;
+      if (!item.rev) {
+        if (!barsMap.has(item.name)) {
+          barsMap.set(item.name, { mi, startFrac: cumFrac, endMi: mi, endFrac: cumFrac + f, colorIdx: colorIdx++ });
+        } else {
+          const b = barsMap.get(item.name);
+          b.endMi = mi; b.endFrac = cumFrac + f;
+        }
+      }
+      cumFrac += f;
+    });
+  });
+
+  const bars = [];
+  barsMap.forEach(({ mi, startFrac, endMi, endFrac, colorIdx: ci }, name) => {
+    bars.push({
+      name,
+      leftPct:  (mi + startFrac) / numM * 100,
+      widthPct: (endMi + endFrac - mi - startFrac) / numM * 100,
+      color:    GANTT_COLORS[ci % GANTT_COLORS.length],
+    });
+  });
+  bars.sort((a, b) => a.leftPct - b.leftPct);
+
+  const totalH = bars.length * ROW_H;
+  let html = `<div class="gantt-wrap"><div class="gantt-inner">`;
+  html += `<div class="gantt-header"><div class="gantt-label-col-h"></div><div class="gantt-month-headers" style="grid-template-columns:repeat(${numM},1fr);">`;
+  months.forEach(mo => { html += `<div class="gantt-month-h">${mo.m}월${mo.year !== (S.year || 2026) ? `<span style="font-size:.6rem;opacity:.6;">'${String(mo.year).slice(2)}</span>` : ''}</div>`; });
+  html += `</div></div><div class="gantt-body">`;
+  html += `<div class="gantt-labels">`;
+  bars.forEach(b => { html += `<div class="gantt-label-row" style="height:${ROW_H}px;">${b.name}</div>`; });
+  html += `</div>`;
+  html += `<div class="gantt-timeline-area" style="height:${totalH}px;">`;
+  html += `<div class="gantt-gridlines" style="grid-template-columns:repeat(${numM},1fr);">`;
+  months.forEach(() => { html += `<div class="gantt-gridline"></div>`; });
+  html += `</div><div class="gantt-bars" style="height:${totalH}px;">`;
+  bars.forEach((b, i) => {
+    const showText = b.widthPct >= 14;
+    html += `<div class="gantt-bar" data-name="${b.name}" style="left:${b.leftPct.toFixed(2)}%;width:${b.widthPct.toFixed(2)}%;top:${i*ROW_H+8}px;height:${ROW_H-16}px;background:${b.color};">${showText ? `<span>${b.name}</span>` : ''}</div>`;
+  });
+  html += `</div></div></div></div></div>`;
+
+  document.getElementById('gantt-chart').innerHTML = html;
+
+  let tip = document.getElementById('gantt-tooltip');
+  const barsEl = document.querySelector('#gantt-chart .gantt-bars');
+  if (barsEl) {
+    barsEl.addEventListener('mouseover', e => {
+      const bar = e.target.closest('.gantt-bar');
+      if (bar) { tip.textContent = bar.dataset.name; tip.style.display = 'block'; }
+    });
+    barsEl.addEventListener('mousemove', e => {
+      tip.style.left = (e.clientX + 14) + 'px';
+      tip.style.top  = (e.clientY - 40) + 'px';
+    });
+    barsEl.addEventListener('mouseout', e => {
+      if (!e.relatedTarget?.closest('.gantt-bar')) tip.style.display = 'none';
+    });
+  }
+}
+
+/* ═══════════════ STATS ═══════════════ */
+function renderStats(p) {
+  const { totalDays, capacity, totalNeeded, fullCount, lpd, result } = p;
+  const CURRS = getCurrs();
+  const hDisp = S.hours >= 7 ? '6h+' : S.hours + 'h';
+  const recNeeded = result.filter(c => c.status !== 'skipped').reduce((s, c) => s + c.needed, 0);
+  const numCurr = CURRS.length;
+  document.getElementById('stat-grid').innerHTML = [
+    { val: totalDays + '일',         lbl: '총 학습 기간'          },
+    { val: hDisp,                    lbl: '하루 학습 시간'         },
+    { val: '약 ' + lpd + '강',       lbl: '하루 수강<br>강의수'    },
+    { val: capacity + '강',          lbl: '수강 가능<br>총 강의'   },
+    { val: recNeeded + '강',         lbl: '추천 커리큘럼<br>총 강의' },
+    { val: fullCount + '/' + numCurr, lbl: '완주 가능<br>과정수'   },
+  ].map(s => `<div class="stat-item"><div class="val">${s.val}</div><div class="lbl">${s.lbl}</div></div>`).join('');
+}
+
+/* ═══════════════ CURRICULUM ROADMAP ═══════════════ */
+function progressKey() { return `jtm_${S.year}_${S.target}_${S.startDate?.toISOString().slice(0,10)}_${S.hours}`; }
+function getProgress()  { try { return new Set(JSON.parse(localStorage.getItem(progressKey()) || '[]')); } catch { return new Set(); } }
+function saveProgress(s) { localStorage.setItem(progressKey(), JSON.stringify([...s])); }
+function toggleDone(seq) { const d = getProgress(); d.has(seq) ? d.delete(seq) : d.add(seq); saveProgress(d); renderCurriculum(window._plan); }
+function resetProgress() { localStorage.removeItem(progressKey()); renderCurriculum(window._plan); }
+
+function renderCurriculum(p) {
+  const { result } = p;
+  const done = getProgress();
+  const active = result.filter(c => c.status !== 'skipped');
+  const doneCount = active.filter(c => done.has(c.seq)).length;
+  const allDone   = active.length > 0 && doneCount === active.length;
+
+  const dots = result.map(c => {
+    if (c.status === 'skipped') return `<div class="prog-dot pd-skip"></div>`;
+    if (done.has(c.seq))        return `<div class="prog-dot pd-done"></div>`;
+    if (c.status === 'partial') return `<div class="prog-dot pd-partial"></div>`;
+    return `<div class="prog-dot pd-active"></div>`;
+  }).join('');
+
+  const progColor = allDone ? 'var(--green)' : 'var(--gray-700)';
+  const progMsg   = allDone ? '🎉 전 과정 완료!' : `${doneCount} / ${active.length} 완료`;
+  const progHtml  = `<div class="prog-bar-wrap">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="prog-dots">${dots}</div>
+      <span class="prog-txt" style="color:${progColor};">${progMsg}</span>
+    </div>
+    <button class="prog-reset" onclick="resetProgress()">초기화</button>
+  </div>`;
+
+  // Render roadmap (split 1차/2차 for 동차)
+  let flowHtml = '';
+  const isDongCha = S.target === '동차';
+
+  function renderRow(items, label) {
+    const colCount = items.length;
+    const minW = colCount * 90;
+    let h = '';
+    if (label) h += `<div class="rm-section-label">${label}<span></span></div>`;
+    h += `<div class="rm-outer"><div class="rm-grid" style="grid-template-columns:repeat(${colCount},1fr);min-width:${minW}px;">`;
+    items.forEach(c => {
+      const isDone  = done.has(c.seq) && c.status !== 'skipped';
+      const baseCls = c.status === 'full' ? 'included' : c.status === 'partial' ? 'partial' : 'skipped';
+      const cls     = isDone ? `${baseCls} done` : baseCls;
+      const icon    = isDone ? '✅' : c.status === 'full' ? '⬜' : c.status === 'partial' ? '⚡' : '❌';
+      const sLbl    = isDone ? '완료!' : c.status === 'full' ? '완주 가능' : c.status === 'partial' ? `${c.pct||'?'}%` : '시간 부족';
+      const sClr    = isDone ? 'var(--green)' : baseCls === 'skipped' ? 'var(--gray-400)' : baseCls === 'partial' ? 'var(--amber)' : 'var(--orange)';
+      const chkBtn  = c.status !== 'skipped'
+        ? `<button class="rm-chk" onclick="toggleDone(${c.seq})">${isDone ? '☑ 완료됨' : '☐ 완료 체크'}</button>` : '';
+      const displayName = isDongCha ? c.name.replace(/\[(?:1|2)차\]/g, '') : c.name;
+      h += `<div class="rm-cell ${cls}">
+        <div class="rm-seq">STEP ${c.seq}</div>
+        <div class="rm-name">${displayName}</div>
+        <div class="rm-cnt">${c.needed}강</div>
+        <div class="rm-icon">${icon}</div>
+        <div class="rm-stlbl" style="color:${sClr};">${sLbl}</div>
+        ${chkBtn}
+      </div>`;
+    });
+    h += '</div></div>';
+    return h;
+  }
+
+  if (isDongCha) {
+    const items1 = result.filter(c => c.cat === '1차');
+    const items2 = result.filter(c => c.cat === '2차');
+    flowHtml = renderRow(items1, '🏠 1차 (회계원리·시설개론·민법)') + renderRow(items2, '🏢 2차 (관계법규·관리실무)');
+  } else {
+    flowHtml = renderRow(result, '');
+  }
+
+  // Study path
+  const included = result.filter(c => c.status !== 'skipped');
+  const skipped  = result.filter(c => c.status === 'skipped');
+  const spCols   = included.length;
+  const spMinW   = spCols * 90;
+  let pathHtml   = `<div class="study-path"><div class="sp-label">📖 실제 학습 순서</div><div class="sp-scroll"><div class="sp-items" style="grid-template-columns:repeat(${spCols},1fr);min-width:${spMinW}px;">`;
+  included.forEach(c => {
+    const dispName = isDongCha ? c.name.replace(/\[(?:1|2)차\]/g, '') : c.name.replace(/<br>/g, ' ');
+    pathHtml += `<div class="sp-tag"><span>${dispName}</span><span class="sp-lec">${c.status==='partial'?c.effective+'/':''}${c.needed}강</span></div>`;
+  });
+  pathHtml += '</div></div></div>';
+
+  let skipHtml = '';
+  if (skipped.length > 0) {
+    skipHtml = `<div class="skip-note">⏭️ <strong>생략 과정:</strong> ${skipped.map(c => c.name.replace(/<br>/g,' ').replace(/\[(?:1|2)차\]/g,'')).join(', ')}<br>학습 시작 월을 앞당기거나 하루 학습 시간을 늘리면 추가로 포함됩니다.</div>`;
+  }
+
+  const hintHtml = `<div class="prog-hint">📖 각 커리큘럼을 완강하셨나요? <strong>☐ 완료 체크</strong> 버튼을 눌러 나만의 합격 여정을 기록해보세요!<br>꾸준히 함께 가요 💪</div>`;
+
+  document.getElementById('curr-roadmap').innerHTML = progHtml + flowHtml + hintHtml + pathHtml + skipHtml;
+}
+
+/* ═══════════════ WEEKLY ═══════════════ */
+function renderWeekly(p) {
+  const subjs = SUBJECTS[S.target];
+  const n = subjs.length;
+  const startDate = S.startDate;
+  const DAY_NAMES = ['일','월','화','수','목','금','토'];
+
+  const firstCurr = p.result.find(c => c.status !== 'skipped');
+  const currNote = firstCurr
+    ? `<div style="margin-bottom:14px;padding:10px 14px;background:var(--orange-light);border:1px solid var(--orange-mid);border-radius:8px;font-size:.84rem;color:#7c2d12;">
+         📌 <strong>학습 시작 커리큘럼:</strong> ${firstCurr.name.replace(/<br>/g,' ')} (${firstCurr.needed}강) — 매일 과목을 순환하며 수강합니다.</div>` : '';
+
+  const firstSun = new Date(startDate);
+  firstSun.setDate(firstSun.getDate() - firstSun.getDay());
+
+  const rows = [];
+  for (let w = 0; w < 2; w++) {
+    const slots = [];
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(firstSun);
+      date.setDate(firstSun.getDate() + w*7 + d);
+      const isPre = date < startDate;
+      if (isPre) {
+        slots.push({ d: DAY_NAMES[d], empty: true });
+      } else {
+        const dayCount = Math.floor((date - startDate) / 864e5);
+        const idx = dayCount % n;
+        slots.push({ d: DAY_NAMES[d], subj: subjs[idx], cls: `s${idx}` });
+      }
+    }
+    rows.push({ label: `${w+1}주차`, slots });
+  }
+
+  let html = currNote;
+  html += `<div class="week-scroll"><table class="week"><thead><tr><th>주차</th>`;
+  DAY_NAMES.forEach((d, i) => { html += `<th${i===0?' class="sun-th"':''}>${d}</th>`; });
+  html += `</tr></thead><tbody>`;
+  rows.forEach(row => {
+    html += `<tr><td style="font-weight:700;font-size:.8rem;color:var(--orange);white-space:nowrap;">${row.label}</td>`;
+    row.slots.forEach(slot => {
+      if (slot.empty) {
+        html += `<td></td>`;
+      } else {
+        const isSun = slot.d === '일';
+        html += `<td${isSun?' class="sun-td"':''}><span class="stag ${slot.cls}">${SHORT[slot.subj]||slot.subj}</span><br><span style="font-size:.7rem;color:var(--gray-400);">${S.hours}h</span></td>`;
+      }
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table></div>`;
+  html += `<div style="margin-top:10px;font-size:.8rem;color:var(--gray-500);background:var(--gray-50);border-radius:8px;padding:8px 12px;">※ 매일 ${n}과목을 하루씩 순환 수강합니다. 동일 커리큘럼을 해당 과목 완강 시까지 반복합니다.</div>`;
+
+  document.getElementById('week-table').innerHTML = html;
+}
+
+/* ═══════════════ MONTHLY ═══════════════ */
+function renderMonthly(p) {
+  const { result, months, lpd } = p;
+  const examDate1 = S.target !== '2차' ? getExamDate('1차', S.year) : null;
+  const examDate2 = S.target !== '1차' ? getExamDate('2차', S.year) : null;
+  const isDongCha = S.target === '동차';
+
+  const BADGE_SHORT = {
+    '[1차]기본이론':'기본이론','[1차]핵심&문제풀이':'핵심&문제풀이','[2차]핵심이론':'핵심이론',
+    '[2차]단원별(객관식)':'단원별(객관식)','기본이론':'기본이론','핵심이론&<br>문제풀이':'핵심&문제풀이',
+    '핵심이론':'핵심이론','단원별<br>문제풀이(객관식)':'단원별(객관식)',
+  };
+
+  let html = '';
+  months.forEach(({ m, year: mYear, sd, ld, lec, contentLec, schedule }) => {
+    const mDate = new Date(mYear, m-1, 1);
+    const isExam1 = examDate1 && mDate.getMonth() === examDate1.getMonth() && mDate.getFullYear() === examDate1.getFullYear();
+    const isExam2 = examDate2 && mDate.getMonth() === examDate2.getMonth() && mDate.getFullYear() === examDate2.getFullYear();
+    const items = schedule || [];
+    const mainItem = items.find(it => !it.rev) || null;
+    const currItems = items.filter(it => !it.rev);
+    const badgeTxt = mainItem ? (BADGE_SHORT[mainItem.name] || mainItem.name) : '';
+    let headCls = 'mo-head';
+    if (isExam1 && isDongCha) headCls += ' exam1-head';
+    else if (isExam2) headCls += ' exam2-head';
+
+    html += `<div class="mo-card">
+      <div class="${headCls}">
+        <span>${m}월${mYear !== (S.year||2026) ? `<span style="font-size:.65rem;opacity:.7;margin-left:2px;">'${String(mYear).slice(2)}</span>` : ''}${isExam1&&isDongCha ? ' <span class="milestone-badge ms-1st">1차시험</span>' : ''}${isExam2 ? ' 🎯' : ''}${badgeTxt ? `<span style="font-size:.68rem;background:rgba(255,255,255,.25);padding:2px 6px;border-radius:10px;margin-left:6px;">${badgeTxt}</span>` : ''}</span>
+        <span style="font-size:.73rem;opacity:.8;flex-shrink:0;white-space:nowrap;margin-left:4px;">${isExam2 ? `시험 ${examDate2?.getDate()}일` : `${sd}일`}</span>
+      </div>
+      <div class="mo-body">
+        <div class="mo-meta">하루 ${lpd}강 × ${ld}일 = 약 ${lec}강</div>`;
+
+    if (currItems.length > 0) {
+      currItems.forEach(it => {
+        const is2nd = it.cat === '2차';
+        html += `<div class="mo-item">
+          <div class="mo-item-label"><span>${it.name}</span><span style="color:${is2nd?'var(--purple)':'var(--orange)'};">${it.pct}%</span></div>
+          <div class="pb-bg"><div class="pb${is2nd?' pb2':''}" style="width:${it.pct}%"></div></div>
+        </div>`;
+      });
+    } else {
+      html += `<div class="mo-done">✅ 전 커리큘럼 완료 · 최종 점검</div>`;
+    }
+    html += `</div></div>`;
+  });
+
+  document.getElementById('mo-grid').innerHTML = html;
+}
+
+/* ═══════════════ SAVE/LOAD ═══════════════ */
+function saveMyPlan() {
+  localStorage.setItem(MY_PLAN_KEY, JSON.stringify({
+    year: S.year, target: S.target, hours: S.hours,
+    startDate: S.startDate ? S.startDate.toISOString() : null
+  }));
+  updateMyPlanBtn();
+}
+
+function saveMyPlanWithFeedback(btn) {
+  saveMyPlan();
+  const orig = btn.textContent;
+  btn.textContent = '✅ 저장 완료!';
+  setTimeout(() => { btn.textContent = orig; }, 2000);
+}
+
+function loadMyPlan() {
+  try { return JSON.parse(localStorage.getItem(MY_PLAN_KEY)); } catch { return null; }
+}
+
+function updateMyPlanBtn() {
+  const saved = loadMyPlan();
+  const btn = document.getElementById('my-plan-btn');
+  if (!btn) return;
+  if (!saved) { btn.style.display = 'none'; return; }
+  const tLbl  = saved.target || '';
+  const hLbl  = saved.hours >= 7 ? '6시간+' : saved.hours + '시간';
+  const dStr  = saved.startDate ? new Date(saved.startDate).toLocaleDateString('ko-KR', {month:'numeric',day:'numeric'}) : '';
+  btn.style.display = '';
+  btn.innerHTML = `<div class="mpb-tag">🏠 나의 학습계획</div>
+    <div class="mpb-val">${tLbl} · ${dStr} · ${hLbl}</div>
+    <div class="mpb-action">▶ 바로 보기</div>`;
+  positionMyPlanBtn();
+}
+
+function goMyPlan() {
+  const saved = loadMyPlan();
+  if (!saved) return;
+  if (saved.year) {
+    document.querySelectorAll('#year-group .opt-btn').forEach(b => b.classList.toggle('active', +b.dataset.v === saved.year));
+    S.year = saved.year;
+    calMax = S.year === 2027 ? new Date(2027,8,20) : new Date(2026,8,19);
+  }
+  if (saved.startDate) {
+    const d = new Date(saved.startDate);
+    S.startDate = d;
+    calYear = d.getFullYear(); calMonth = d.getMonth();
+  }
+  renderCalendar();
+  updateTargetAvailability();
+  document.querySelectorAll('#target-group .opt-btn').forEach(b => b.classList.toggle('active', b.dataset.v === saved.target));
+  S.target = saved.target;
+  document.querySelectorAll('.hours-btn').forEach(b => b.classList.toggle('active', +b.dataset.v === saved.hours));
+  S.hours = saved.hours;
+  updateBanner();
+  updateHoursHint();
+  generate();
+}
+</script>
+</body>
+</html>
