@@ -264,6 +264,7 @@
     table.week th.sun-th { background: #9f1239; }
     table.week td { padding: 10px 6px; text-align: center; border: 1px solid var(--gray-200); }
     table.week td.sun-td { background: #fff1f2; }
+    table.week td.rest-td { background: var(--gray-100); }
     table.week tr:nth-child(even) td { background: var(--gray-50); }
     table.week tr:nth-child(even) td.sun-td { background: #ffe4e6; }
     .stag { display: inline-block; padding: 3px 8px; border-radius: 20px; font-size: .72rem; font-weight: 700; white-space: nowrap; }
@@ -1043,6 +1044,17 @@ function renderWeekly(p) {
   const n = subjs.length;
   const startDate = S.startDate;
   const DAY_NAMES = ['일','월','화','수','목','금','토'];
+  const isDongCha = S.target === '동차';
+
+  // 동차 2주 순환 패턴: 인덱스 = 요일(0=일~6=토)
+  // null = 복습/휴식, 문자열 = 과목명
+  const DONGCHA_TPL = [
+    // 1주차(홀수): 목 = 회계원리
+    [null, '회계원리', '시설개론', '민법', '회계원리', '관계법규', '관리실무'],
+    // 2주차(짝수): 목 = 민법
+    [null, '회계원리', '시설개론', '민법', '민법',   '관계법규', '관리실무'],
+  ];
+  const SUBJ_CLS = { '회계원리':'s0', '시설개론':'s1', '민법':'s2', '관계법규':'s3', '관리실무':'s4' };
 
   const firstCurr = p.result.find(c => c.status !== 'skipped');
   const currNote = firstCurr
@@ -1055,12 +1067,20 @@ function renderWeekly(p) {
   const rows = [];
   for (let w = 0; w < 2; w++) {
     const slots = [];
+    const tplWeek = w % 2; // 0=1주차패턴, 1=2주차패턴
     for (let d = 0; d < 7; d++) {
       const date = new Date(firstSun);
       date.setDate(firstSun.getDate() + w*7 + d);
       const isPre = date < startDate;
       if (isPre) {
         slots.push({ d: DAY_NAMES[d], empty: true });
+      } else if (isDongCha) {
+        const subj = DONGCHA_TPL[tplWeek][d];
+        if (subj === null) {
+          slots.push({ d: DAY_NAMES[d], rest: true });
+        } else {
+          slots.push({ d: DAY_NAMES[d], subj, cls: SUBJ_CLS[subj] });
+        }
       } else {
         const dayCount = Math.floor((date - startDate) / 864e5);
         const idx = dayCount % n;
@@ -1079,6 +1099,8 @@ function renderWeekly(p) {
     row.slots.forEach(slot => {
       if (slot.empty) {
         html += `<td></td>`;
+      } else if (slot.rest) {
+        html += `<td class="rest-td"><span style="font-size:.73rem;color:var(--gray-400);">복습<br>휴식</span></td>`;
       } else {
         const isSun = slot.d === '일';
         html += `<td${isSun?' class="sun-td"':''}><span class="stag ${slot.cls}">${SHORT[slot.subj]||slot.subj}</span><br><span style="font-size:.7rem;color:var(--gray-400);">${S.hours}h</span></td>`;
@@ -1087,7 +1109,15 @@ function renderWeekly(p) {
     html += `</tr>`;
   });
   html += `</tbody></table></div>`;
-  html += `<div style="margin-top:10px;font-size:.8rem;color:var(--gray-500);background:var(--gray-50);border-radius:8px;padding:8px 12px;">※ 매일 ${n}과목을 하루씩 순환 수강합니다. 동일 커리큘럼을 해당 과목 완강 시까지 반복합니다.</div>`;
+
+  if (isDongCha) {
+    html += `<div style="margin-top:10px;font-size:.8rem;color:var(--gray-500);background:var(--gray-50);border-radius:8px;padding:8px 12px;">
+      ※ <strong>1차 4일</strong>(월·화·수·목) · <strong>2차 2일</strong>(금·토) · <strong>복습/휴식 1일</strong>(일)<br>
+      목요일은 격주 교체 — 1주차: 회계원리, 2주차: 민법
+    </div>`;
+  } else {
+    html += `<div style="margin-top:10px;font-size:.8rem;color:var(--gray-500);background:var(--gray-50);border-radius:8px;padding:8px 12px;">※ 매일 ${n}과목을 하루씩 순환 수강합니다. 동일 커리큘럼을 해당 과목 완강 시까지 반복합니다.</div>`;
+  }
 
   document.getElementById('week-table').innerHTML = html;
 }
