@@ -775,8 +775,125 @@ function isOpen(openM, moYear, moMonth, examYear) {
   return moMonth >= openM;
 }
 
+/* ═══════════════ 동차 DUAL-TRACK PLAN ═══════════════ */
+function buildDongchaPlan() {
+  const examDate2 = EXAM_2[S.year];
+  const examDate1 = EXAM_1[S.year];
+  const startDate  = S.startDate;
+  const startMid   = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const totalDays  = Math.ceil((examDate2 - startMid) / 864e5);
+  const lpd        = S.hours;
+  const examYear   = examDate2.getFullYear();
+
+  // 월 목록 (시작 → 2차 시험)
+  const months = [];
+  let curM = startDate.getMonth() + 1, curY = startDate.getFullYear();
+  const endM = examDate2.getMonth() + 1, endY = examDate2.getFullYear();
+  while (curY < endY || (curY === endY && curM <= endM)) {
+    const daysInM  = new Date(curY, curM, 0).getDate();
+    const startDay = (curM === startDate.getMonth()+1 && curY === startDate.getFullYear()) ? startDate.getDate() : 1;
+    const sd = daysInM - startDay + 1;
+    months.push({ m: curM, year: curY, sd, ld: sd, lec: sd * lpd });
+    curM++; if (curM > 12) { curM = 1; curY++; }
+  }
+
+  // 1차 시험 이전: 주4일(4/6) → 1차, 주2일(2/6) → 2차 / 1차 시험 이후: 전부 → 2차
+  let cap1 = 0, cap2 = 0;
+  months.forEach(mo => {
+    const after1 = mo.year > examDate1.getFullYear() ||
+      (mo.year === examDate1.getFullYear() && mo.m > examDate1.getMonth() + 1);
+    if (after1) {
+      mo.lec1 = 0;
+      mo.lec2 = mo.ld * lpd;
+    } else {
+      mo.lec1 = Math.round(mo.ld * lpd * 4 / 6);
+      mo.lec2 = mo.ld * lpd - mo.lec1;
+    }
+    cap1 += mo.lec1;
+    cap2 += mo.lec2;
+  });
+
+  // 우선순위 기반 수강 가능 여부 결정 (priority 높은 것부터 full 할당)
+  function allocate(currs, cap) {
+    const sorted = currs.map(c => ({ ...c, needed: c.total })).sort((a, b) => a.pri - b.pri);
+    let rem = cap;
+    sorted.forEach(c => {
+      if (rem >= c.needed)  { c.status = 'full';    c.effective = c.needed; rem -= c.needed; }
+      else if (rem > 0)     { c.status = 'partial'; c.effective = rem; c.pct = Math.round(rem/c.needed*100); rem = 0; }
+      else                  { c.status = 'skipped'; c.effective = 0; }
+    });
+    return sorted;
+  }
+  const alloc1 = allocate(CURRS_D.filter(c => c.cat === '1차'), cap1);
+  const alloc2 = allocate(CURRS_D.filter(c => c.cat === '2차'), cap2);
+
+  // 결과 배열 (CURRS_D 원래 순서 유지)
+  const r1 = new Map(alloc1.map(c => [c.seq, c]));
+  const r2 = new Map(alloc2.map(c => [c.seq, c]));
+  const result = CURRS_D.map(orig => orig.cat === '1차' ? r1.get(orig.seq) : r2.get(orig.seq));
+
+  // openM 시간순 정렬 키 (음수 = 전년도 해당월)
+  function openKey(m) {
+    return m < 0 ? (examYear - 1) * 12 + (-m) : examYear * 12 + (m || 0);
+  }
+  function makeTrack(allocated) {
+    return allocated
+      .filter(c => c.status !== 'skipped')
+      .sort((a, b) => {
+        const d = openKey(a.openM||0) - openKey(b.openM||0);
+        return d !== 0 ? d : (a.pri||99) - (b.pri||99);
+      })
+      .map(c => ({ seq: c.seq, name: c.name.replace(/<br>/g,''), remaining: c.effective, openM: c.openM||0, cat: c.cat }));
+  }
+  const track1 = makeTrack(alloc1);
+  const track2 = makeTrack(alloc2);
+
+  // 월별 스케줄 채우기 (독립 트랙)
+  let ci1 = 0, ci2 = 0;
+  months.forEach(mo => {
+    while (ci1 < track1.length && track1[ci1].remaining <= 0) ci1++;
+    while (ci2 < track2.length && track2[ci2].remaining <= 0) ci2++;
+    const sch = [];
+
+    // 1차 트랙 — 1차 시험월까지만
+    if (mo.lec1 > 0 && ci1 < track1.length) {
+      let cap = mo.lec1;
+      while (cap > 0 && ci1 < track1.length) {
+        if (!isOpen(track1[ci1].openM, mo.year, mo.m, examYear)) break;
+        const take = Math.min(track1[ci1].remaining, cap);
+        const pct  = Math.round(take / mo.lec * 100);
+        if (pct > 0) sch.push({ name: track1[ci1].name, pct, cat: '1차' });
+        track1[ci1].remaining -= take;
+        cap -= take;
+        if (track1[ci1].remaining <= 0) ci1++;
+      }
+    }
+
+    // 2차 트랙 — 전 기간 (1차 이후에는 전체 용량)
+    if (mo.lec2 > 0 && ci2 < track2.length) {
+      let cap = mo.lec2;
+      while (cap > 0 && ci2 < track2.length) {
+        if (!isOpen(track2[ci2].openM, mo.year, mo.m, examYear)) break;
+        const take = Math.min(track2[ci2].remaining, cap);
+        const pct  = Math.round(take / mo.lec * 100);
+        if (pct > 0) sch.push({ name: track2[ci2].name, pct, cat: '2차' });
+        track2[ci2].remaining -= take;
+        cap -= take;
+        if (track2[ci2].remaining <= 0) ci2++;
+      }
+    }
+    mo.schedule = sch;
+  });
+
+  const totalNeeded = CURRS_D.reduce((s, c) => s + c.total, 0);
+  const capacity    = totalDays * lpd;
+  const fullCount   = result.filter(c => c.status === 'full').length;
+  return { totalDays, capacity, totalNeeded, fullCount, result, months, lpd, examYear };
+}
+
 /* ═══════════════ PLAN CALCULATION ═══════════════ */
 function buildPlan() {
+  if (S.target === '동차') return buildDongchaPlan();
   const examDate = getExamDate();
   const examYear = examDate.getFullYear();
   const startDate = S.startDate;
