@@ -328,6 +328,39 @@
     .mpb-action { font-size: .7rem; opacity: .85; }
     #results { display: none; }
     .avail-note { font-size: .75rem; color: var(--amber); margin-top: 8px; padding: 6px 10px; background: #fffbeb; border-radius: 6px; border: 1px solid #fde68a; }
+    /* ═══ 동차 로드맵 테이블 ═══ */
+    .dc-rm-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .dc-rm-table { border-collapse: separate; border-spacing: 3px; min-width: 540px; width: 100%; font-size: .82rem; }
+    .dc-rm-table thead th {
+      background: var(--orange); color: #fff;
+      padding: 7px 4px; text-align: center;
+      font-weight: 700; font-size: .72rem;
+      white-space: nowrap; border-radius: 6px; min-width: 42px;
+    }
+    .dc-rm-table th.dc-exam1-hd { background: #7c3aed; }
+    .dc-rm-table th.dc-exam2-hd { background: #dc2626; }
+    .dc-yr { display: block; font-size: .54rem; opacity: .75; }
+    .dc-exam-tag { display: block; font-size: .55rem; background: rgba(255,255,255,.28); border-radius: 8px; padding: 1px 3px; margin-top: 2px; }
+    .dc-rm-row-hd { min-width: 62px; padding: 8px 10px; background: var(--gray-100); border-radius: 6px; vertical-align: middle; text-align: left; }
+    .dc-cat-lbl { display: inline-block; font-size: .72rem; font-weight: 800; padding: 2px 7px; border-radius: 10px; }
+    .dc-cat1 { background: var(--orange-mid); color: #9a3412; }
+    .dc-cat2 { background: #ede9fe; color: #4c1d95; }
+    .dc-cat-sub { display: block; font-size: .61rem; color: var(--gray-400); margin-top: 3px; }
+    .dc-rm-item { padding: 10px 6px; text-align: center; vertical-align: middle; border-radius: 7px; }
+    .dc-rm-1 { background: var(--orange-light); border: 2px solid var(--orange-mid); }
+    .dc-rm-2 { background: #f5f3ff; border: 2px solid #ddd6fe; }
+    .dc-rm-done { background: #f0fdf4 !important; border-color: #86efac !important; }
+    .dc-rm-empty { background: var(--gray-100); border-radius: 6px; text-align: center; vertical-align: middle; }
+    .dc-item-name { font-weight: 700; font-size: .75rem; color: var(--gray-900); line-height: 1.3; }
+    .dc-item-lec { font-size: .63rem; color: var(--gray-400); margin-top: 3px; }
+    .dc-chk-btn { margin-top: 6px; display: inline-block; font-size: .62rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; border: 1.5px solid; background: transparent; cursor: pointer; transition: filter .15s, transform .1s; }
+    .dc-chk-btn:hover { filter: brightness(.88); transform: scale(1.05); }
+    .dc-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: .75rem; color: var(--gray-500); }
+    .dc-legend-item { display: flex; align-items: center; gap: 5px; }
+    .dc-leg-box { display: inline-block; width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+    .dc-leg-1 { background: var(--orange-light); border: 2px solid var(--orange-mid); }
+    .dc-leg-2 { background: #f5f3ff; border: 2px solid #ddd6fe; }
+    .dc-leg-done { background: #f0fdf4; border: 2px solid #86efac; }
   </style>
 </head>
 <body>
@@ -855,6 +888,7 @@ const GANTT_COLORS = [
 ];
 
 function renderGantt(p) {
+  if (S.target === '동차') { document.getElementById('gantt-chart').innerHTML = ''; return; }
   const { result, months } = p;
   if (!months.length) { document.getElementById('gantt-chart').innerHTML = ''; return; }
 
@@ -952,6 +986,7 @@ function toggleDone(seq) { const d = getProgress(); d.has(seq) ? d.delete(seq) :
 function resetProgress() { localStorage.removeItem(progressKey()); renderCurriculum(window._plan); }
 
 function renderCurriculum(p) {
+  if (S.target === '동차') { renderDongchaRoadmap(p); return; }
   const { result } = p;
   const done = getProgress();
   const active = result.filter(c => c.status !== 'skipped');
@@ -1206,6 +1241,146 @@ function updateMyPlanBtn() {
     <div class="mpb-val">${tLbl} · ${dStr} · ${hLbl}</div>
     <div class="mpb-action">▶ 바로 보기</div>`;
   positionMyPlanBtn();
+}
+
+/* ═══════════════ 동차 로드맵 테이블 ═══════════════ */
+function renderDongchaRoadmap(p) {
+  const { result, months } = p;
+  const done = getProgress();
+  const examDate1 = EXAM_1[S.year];
+  const examDate2 = EXAM_2[S.year];
+
+  // name (br 제거) → result item 맵
+  const itemByName = new Map();
+  result.forEach(c => { itemByName.set(c.name.replace(/<br>/g, ''), c); });
+
+  // 해당 월에서 cat별 대표 항목 (pct 최대)
+  function getPrimary(mo, cat) {
+    const items = (mo.schedule || []).filter(it => it.cat === cat && !it.rev);
+    if (!items.length) return null;
+    return items.reduce((a, b) => a.pct >= b.pct ? a : b);
+  }
+
+  // 연속된 같은 항목 → colspan 세그먼트
+  function buildSegs(cat) {
+    const segs = [];
+    let i = 0;
+    while (i < months.length) {
+      const prim = getPrimary(months[i], cat);
+      if (!prim) {
+        let j = i + 1;
+        while (j < months.length && !getPrimary(months[j], cat)) j++;
+        segs.push({ colspan: j - i, empty: true });
+        i = j;
+      } else {
+        let j = i + 1;
+        while (j < months.length) {
+          const np = getPrimary(months[j], cat);
+          if (np && np.name === prim.name) j++;
+          else break;
+        }
+        const ri = itemByName.get(prim.name);
+        segs.push({
+          colspan: j - i,
+          dispName: prim.name.replace(/\[(?:1|2)차\]/g, ''),
+          total: ri ? ri.total : '?',
+          status: ri ? ri.status : 'full',
+          pct: ri && ri.status === 'partial' ? ri.pct : null,
+          seq: ri ? ri.seq : null,
+        });
+        i = j;
+      }
+    }
+    return segs;
+  }
+
+  const segs1 = buildSegs('1차');
+  const segs2 = buildSegs('2차');
+
+  // 헤더
+  let html = `<div class="dc-rm-scroll"><table class="dc-rm-table"><thead><tr>`;
+  html += `<th style="min-width:62px;border-radius:6px;"></th>`;
+  months.forEach(mo => {
+    const mDate = new Date(mo.year, mo.m - 1, 1);
+    const isE1 = examDate1 && mDate.getMonth() === examDate1.getMonth() && mDate.getFullYear() === examDate1.getFullYear();
+    const isE2 = examDate2 && mDate.getMonth() === examDate2.getMonth() && mDate.getFullYear() === examDate2.getFullYear();
+    const thCls = isE1 ? ' class="dc-exam1-hd"' : isE2 ? ' class="dc-exam2-hd"' : '';
+    const yearTag = mo.year !== S.year ? `<span class="dc-yr">'${String(mo.year).slice(2)}</span>` : '';
+    const examTag = isE1 ? `<span class="dc-exam-tag">1차시험</span>` : isE2 ? `<span class="dc-exam-tag">2차시험</span>` : '';
+    html += `<th${thCls}>${mo.m}월${yearTag}${examTag}</th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  function buildRow(segs, cat) {
+    const labelHtml = cat === '1차'
+      ? `<span class="dc-cat-lbl dc-cat1">1차</span><span class="dc-cat-sub">회계·시설·민법</span>`
+      : `<span class="dc-cat-lbl dc-cat2">2차</span><span class="dc-cat-sub">관계법규·실무</span>`;
+    let row = `<tr><td class="dc-rm-row-hd">${labelHtml}</td>`;
+    segs.forEach(seg => {
+      if (seg.empty) {
+        row += `<td class="dc-rm-empty" colspan="${seg.colspan}"><span style="font-size:.62rem;color:var(--gray-400);">복습</span></td>`;
+      } else {
+        const isDone = seg.seq && done.has(seg.seq);
+        const baseCls = cat === '2차' ? 'dc-rm-item dc-rm-2' : 'dc-rm-item dc-rm-1';
+        const cls = isDone ? baseCls + ' dc-rm-done' : baseCls;
+        const lecTxt = seg.pct ? `${seg.total}강 (${seg.pct}%)` : `${seg.total}강`;
+        const btnClr = isDone ? 'var(--green)' : cat === '2차' ? 'var(--purple)' : 'var(--orange)';
+        const btnTxt = isDone ? '☑ 완료' : '☐ 체크';
+        const chkBtn = seg.seq
+          ? `<button class="dc-chk-btn" onclick="toggleDone(${seg.seq})" style="color:${btnClr};border-color:${btnClr};">${btnTxt}</button>`
+          : '';
+        row += `<td class="${cls}" colspan="${seg.colspan}">
+          <div class="dc-item-name">${seg.dispName}</div>
+          <div class="dc-item-lec">${lecTxt}</div>
+          ${chkBtn}
+        </td>`;
+      }
+    });
+    row += `</tr>`;
+    return row;
+  }
+
+  html += buildRow(segs1, '1차');
+  html += buildRow(segs2, '2차');
+  html += `</tbody></table></div>`;
+
+  // 범례
+  html += `<div class="dc-legend">
+    <span class="dc-legend-item"><span class="dc-leg-box dc-leg-1"></span>1차 과목</span>
+    <span class="dc-legend-item"><span class="dc-leg-box dc-leg-2"></span>2차 과목</span>
+    <span class="dc-legend-item"><span class="dc-leg-box dc-leg-done"></span>완료</span>
+    <span class="dc-legend-item" style="color:var(--gray-400);font-style:italic;">회색 = 복습 기간</span>
+  </div>`;
+
+  // 진행 상황
+  const active = result.filter(c => c.status !== 'skipped');
+  const doneCount = active.filter(c => done.has(c.seq)).length;
+  const allDone = active.length > 0 && doneCount === active.length;
+  const dots = result.map(c => {
+    if (c.status === 'skipped') return `<div class="prog-dot pd-skip"></div>`;
+    if (done.has(c.seq))        return `<div class="prog-dot pd-done"></div>`;
+    if (c.status === 'partial') return `<div class="prog-dot pd-partial"></div>`;
+    return `<div class="prog-dot pd-active"></div>`;
+  }).join('');
+  const progColor = allDone ? 'var(--green)' : 'var(--gray-700)';
+  const progMsg = allDone ? '🎉 전 과정 완료!' : `${doneCount} / ${active.length} 완료`;
+
+  html += `<div class="prog-bar-wrap" style="margin-top:14px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="prog-dots">${dots}</div>
+      <span class="prog-txt" style="color:${progColor};">${progMsg}</span>
+    </div>
+    <button class="prog-reset" onclick="resetProgress()">초기화</button>
+  </div>`;
+
+  html += `<div class="prog-hint">📖 각 커리큘럼을 완강하셨나요? 표의 <strong>☐ 체크</strong> 버튼을 눌러 나만의 합격 여정을 기록해보세요! 💪</div>`;
+
+  const skipped = result.filter(c => c.status === 'skipped');
+  if (skipped.length > 0) {
+    html += `<div class="skip-note">⏭️ <strong>생략 과정:</strong> ${skipped.map(c => c.name.replace(/<br>/g,' ').replace(/\[(?:1|2)차\]/g,'')).join(', ')}<br>학습 시작 월을 앞당기거나 하루 학습 시간을 늘리면 추가로 포함됩니다.</div>`;
+  }
+
+  document.getElementById('curr-roadmap').innerHTML = html;
 }
 
 function goMyPlan() {
