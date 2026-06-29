@@ -836,17 +836,36 @@ function buildDongchaPlan() {
   function openKey(m) {
     return m < 0 ? (examYear - 1) * 12 + (-m) : examYear * 12 + (m || 0);
   }
-  function makeTrack(allocated) {
-    return allocated
+  function makeTrack(allocated, examDateForTrack) {
+    const items = allocated
       .filter(c => c.status !== 'skipped')
       .sort((a, b) => {
         const d = openKey(a.openM||0) - openKey(b.openM||0);
         return d !== 0 ? d : (a.pri||99) - (b.pri||99);
       })
-      .map(c => ({ seq: c.seq, name: c.name.replace(/<br>/g,''), remaining: c.effective, openM: c.openM||0, cat: c.cat }));
+      .map(c => ({ seq: c.seq, name: c.name.replace(/<br>/g,''), remaining: c.effective, total: c.effective, openM: c.openM||0, cat: c.cat }));
+    // 항목별 월간 상한: 개강월 ~ 다음 항목 개강 전까지 구간에 균등 배분
+    items.forEach((item, idx) => {
+      const next = items[idx + 1];
+      let toY, toM;
+      if (next) {
+        toY = next.openM < 0 ? examYear - 1 : examYear;
+        toM = next.openM < 0 ? -next.openM : (next.openM || 1);
+      } else {
+        toY = examDateForTrack.getFullYear();
+        toM = examDateForTrack.getMonth() + 2;
+        if (toM > 12) { toM = 1; toY++; }
+      }
+      const fromY = item.openM < 0 ? examYear - 1 : examYear;
+      const fromM = item.openM < 0 ? -item.openM : (item.openM || 1);
+      let wm = 0, y = fromY, m = fromM;
+      while (y < toY || (y === toY && m < toM)) { wm++; m++; if (m > 12) { m = 1; y++; } }
+      item.monthCap = wm > 0 ? Math.ceil(item.total / wm) : item.total;
+    });
+    return items;
   }
-  const track1 = makeTrack(alloc1);
-  const track2 = makeTrack(alloc2);
+  const track1 = makeTrack(alloc1, examDate1);
+  const track2 = makeTrack(alloc2, examDate2);
 
   // 월별 스케줄 채우기 (독립 트랙)
   let ci1 = 0, ci2 = 0;
@@ -857,29 +876,35 @@ function buildDongchaPlan() {
 
     // 1차 트랙 — 1차 시험월까지만
     if (mo.lec1 > 0 && ci1 < track1.length) {
-      let cap = mo.lec1;
+      let cap = mo.lec1, taken = 0;
       while (cap > 0 && ci1 < track1.length) {
         if (!isOpen(track1[ci1].openM, mo.year, mo.m, examYear)) break;
-        const take = Math.min(track1[ci1].remaining, cap);
+        const avail = (track1[ci1].monthCap || cap) - taken;
+        if (avail <= 0) break;
+        const take = Math.min(track1[ci1].remaining, cap, avail);
         const pct  = Math.round(take / mo.lec * 100);
         if (pct > 0) sch.push({ name: track1[ci1].name, pct, cat: '1차' });
         track1[ci1].remaining -= take;
         cap -= take;
-        if (track1[ci1].remaining <= 0) ci1++;
+        taken += take;
+        if (track1[ci1].remaining <= 0) { ci1++; taken = 0; }
       }
     }
 
     // 2차 트랙 — 전 기간 (1차 이후에는 전체 용량)
     if (mo.lec2 > 0 && ci2 < track2.length) {
-      let cap = mo.lec2;
+      let cap = mo.lec2, taken = 0;
       while (cap > 0 && ci2 < track2.length) {
         if (!isOpen(track2[ci2].openM, mo.year, mo.m, examYear)) break;
-        const take = Math.min(track2[ci2].remaining, cap);
+        const avail = (track2[ci2].monthCap || cap) - taken;
+        if (avail <= 0) break;
+        const take = Math.min(track2[ci2].remaining, cap, avail);
         const pct  = Math.round(take / mo.lec * 100);
         if (pct > 0) sch.push({ name: track2[ci2].name, pct, cat: '2차' });
         track2[ci2].remaining -= take;
         cap -= take;
-        if (track2[ci2].remaining <= 0) ci2++;
+        taken += take;
+        if (track2[ci2].remaining <= 0) { ci2++; taken = 0; }
       }
     }
     mo.schedule = sch;
@@ -1445,7 +1470,8 @@ function renderDongchaRoadmap(p) {
     let row = `<tr><td class="dc-rm-row-hd">${labelHtml}</td>`;
     segs.forEach(seg => {
       if (seg.empty) {
-        row += `<td class="dc-rm-empty" colspan="${seg.colspan}"><span style="font-size:.62rem;color:var(--gray-400);">복습</span></td>`;
+        const emptyLabel = cat === '1차' ? '2차 집중 학습' : '1차 집중 학습';
+        row += `<td class="dc-rm-empty" colspan="${seg.colspan}"><span style="font-size:.62rem;color:var(--gray-400);">${emptyLabel}</span></td>`;
       } else {
         const isDone = seg.seq && done.has(seg.seq);
         const baseCls = cat === '2차' ? 'dc-rm-item dc-rm-2' : 'dc-rm-item dc-rm-1';
@@ -1476,7 +1502,7 @@ function renderDongchaRoadmap(p) {
     <span class="dc-legend-item"><span class="dc-leg-box dc-leg-1"></span>1차 과목</span>
     <span class="dc-legend-item"><span class="dc-leg-box dc-leg-2"></span>2차 과목</span>
     <span class="dc-legend-item"><span class="dc-leg-box dc-leg-done"></span>완료</span>
-    <span class="dc-legend-item" style="color:var(--gray-400);font-style:italic;">회색 = 복습 기간</span>
+    <span class="dc-legend-item" style="color:var(--gray-400);font-style:italic;">회색 = 집중 학습 기간</span>
   </div>`;
 
   // 진행 상황
