@@ -484,8 +484,8 @@ const CURRS_2 = [
   { seq:1, name:'기초이론',                    pri:8, total:24,  openM:-10 },
   { seq:2, name:'이론완성(上)',                 pri:7, total:96,  openM:-11 },
   { seq:3, name:'이론완성(下)',                 pri:6, total:92,  openM:1   },
-  { seq:4, name:'단원별<br>문제풀이(객관식)',   pri:4, total:150, openM:7   },
-  { seq:5, name:'단원별<br>문제풀이(주관식)',   pri:5, total:56,  openM:7   },
+  { seq:4, name:'단원별<br>문제풀이<br>(객관식)', pri:4, total:150, openM:7 },
+  { seq:5, name:'단원별<br>문제풀이<br>(주관식)', pri:5, total:56,  openM:7 },
   { seq:6, name:'핵심이론',                    pri:1, total:144, openM:7   },
   { seq:7, name:'마무리<br>100선특강',         pri:2, total:16,  openM:8   },
   { seq:8, name:'동형모의고사',                pri:3, total:24,  openM:9   },
@@ -994,11 +994,13 @@ function buildPlan2차() {
     const sch = [];
 
     // 주력 트랙 스케줄링
+    let mainLeftover = 0;
     {
       let cap = mainCap;
       while (cap > 0 && ci_m < mainTrack.length) {
         if (!isOpen(mainTrack[ci_m].openM, mo.year, mo.m, examYear)) {
           sch.push({ name: '부족한 과목 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
+          cap = 0;
           break;
         }
         const take = Math.min(mainTrack[ci_m].remaining, cap);
@@ -1008,13 +1010,13 @@ function buildPlan2차() {
         cap -= take;
         if (mainTrack[ci_m].remaining <= 0) ci_m++;
       }
-      if (cap > 0 && ci_m >= mainTrack.length)
-        sch.push({ name: '전 과정 최종 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
+      mainLeftover = cap;
     }
 
-    // 병행 트랙 스케줄링 (7~8월 한정)
-    if (sideCap > 0) {
-      let cap = sideCap;
+    // 병행 트랙: 7~8월은 비율 할당, 그 외 월은 주력 완료 후 잔여 용량 활용
+    {
+      const sideCapForMonth = isConcurrent ? sideCap : mainLeftover;
+      let cap = sideCapForMonth;
       while (cap > 0 && ci_s < sideTrack.length) {
         if (!isOpen(sideTrack[ci_s].openM, mo.year, mo.m, examYear)) break;
         const take = Math.min(sideTrack[ci_s].remaining, cap);
@@ -1024,6 +1026,8 @@ function buildPlan2차() {
         cap -= take;
         if (sideTrack[ci_s].remaining <= 0) ci_s++;
       }
+      if (cap > 0 && ci_m >= mainTrack.length && ci_s >= sideTrack.length)
+        sch.push({ name: '전 과정 최종 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
     }
 
     mo.schedule = sch;
@@ -1192,8 +1196,9 @@ function renderGantt(p) {
   });
   bars.sort((a, b) => a.leftPct - b.leftPct);
 
-  // 5자 이상 한글 뒤 '('가 오면 줄바꿈 삽입 (예: 단원별문제풀이(객관식) → 두 줄)
   function ganttLabel(name) {
+    if (name === '단원별문제풀이(객관식)') return '단원별<br>문제풀이<br>(객관식)';
+    if (name === '단원별문제풀이(주관식)') return '단원별<br>문제풀이<br>(주관식)';
     return name.replace(/((?:[가-힣]){5,})\(/, '$1<br>(');
   }
 
