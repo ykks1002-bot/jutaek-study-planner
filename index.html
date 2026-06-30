@@ -502,7 +502,7 @@
   </div>
 </div>
 
-<div id="right-actions" style="position:fixed;right:12px;z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:stretch;">
+<div id="right-actions" style="position:fixed;right:12px;z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:stretch;transition:top .1s,right .1s;">
   <button onclick="showStats()" style="
     background:linear-gradient(135deg,#7c3aed,#8b5cf6);
     color:#fff;border:2px solid rgba(255,255,255,.6);
@@ -843,11 +843,26 @@ function updateHoursHint() {
 }
 
 function positionMyPlanBtn() {
-  const el = document.getElementById('right-actions');
-  if (!el) return;
-  const headerH = document.querySelector('header')?.offsetHeight || 80;
-  el.style.top = (headerH + 16) + 'px';
+  const container = document.getElementById('right-actions');
+  if (!container) return;
+  const gap  = 12;
+  const btnW = container.offsetWidth || 145;
+  const viewW = window.innerWidth;
+  const wrap = document.querySelector('.wrap');
+  const spaceRight = wrap ? viewW - wrap.getBoundingClientRect().right : 0;
+  if (spaceRight >= btnW + gap * 2) {
+    container.style.right  = (spaceRight - btnW - gap) + 'px';
+    const bannerTop = document.querySelector('.exam-banner')?.getBoundingClientRect().top ?? 20;
+    container.style.top    = Math.max(bannerTop + 8, 20) + 'px';
+    container.style.bottom = 'auto';
+  } else {
+    container.style.right  = gap + 'px';
+    container.style.bottom = gap + 'px';
+    container.style.top    = 'auto';
+  }
 }
+window.addEventListener('scroll', positionMyPlanBtn);
+window.addEventListener('resize', positionMyPlanBtn);
 
 /* ═══════════════ AVAILABILITY CHECK ═══════════════ */
 function isOpen(openM, moYear, moMonth, examYear) {
