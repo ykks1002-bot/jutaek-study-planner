@@ -886,9 +886,10 @@ function isOpen(openM, moYear, moMonth, examYear) {
 }
 
 /* ═══════════════ 동차 DUAL-TRACK PLAN ═══════════════ */
-// 1차: startDate ~ Jun 15 (100% 1차)
-// 휴식: Jun 16 ~ 6월 마지막주 월요일 전날
-// 2차: 6월 마지막주 월요일 ~ Sep 15 (buildPlan2차 방식: 7~8월 핵심이론 중심)
+// Phase A (시작 ~ 3월): 1차 4/6 + 2차(기초이론·이론완성) 2/6 병행
+// Phase B (4~6월 15일): 1차 집중 100%
+// 휴식: 6/16 ~ 6월 마지막주 월요일 전날
+// Phase C (6월 마지막주 월요일 ~ 9/15): 2차 집중 (7~8월 핵심이론 중심)
 function buildDongchaPlan() {
   const examYear  = S.year;
   const deadline1 = new Date(examYear, 5, 15);   // Jun 15: 1차 완료 목표
@@ -918,25 +919,36 @@ function buildDongchaPlan() {
     curM++; if (curM > 12) { curM = 1; curY++; }
   }
 
-  // ── 월별 1차/2차 용량 분배 ──────────────────────────────────────
-  let cap1 = 0, cap2 = 0;
+  // ── 월별 용량 분배 ────────────────────────────────────────────────
+  // Phase A: start ~ Mar → 4/6 1차 + 2/6 2차
+  // Phase B: Apr ~ May → 100% 1차
+  // June: 1-15 → 1차, gap, 마지막주 월요일~30 → 2차
+  // Phase C: Jul ~ Sep → 100% 2차
+  let cap1 = 0, cap2_early = 0, cap2_late = 0;
   months.forEach(mo => {
-    if (mo.year < examYear || (mo.year === examYear && mo.m < 6)) {
-      mo.lec1 = mo.lec;                                     // 6월 이전: 전부 1차
+    mo.lec1 = 0; mo.lec2 = 0; mo.gapLec = 0;
+    const isPhaseA = mo.year < examYear || (mo.year === examYear && mo.m <= 3);
+    if (isPhaseA) {
+      mo.lec1 = Math.round(mo.lec * 4 / 6);
+      mo.lec2 = mo.lec - mo.lec1;
+      cap2_early += mo.lec2;
+    } else if (mo.year === examYear && mo.m < 6) {
+      mo.lec1 = mo.lec;                                     // 4~5월: 100% 1차
     } else if (mo.year === examYear && mo.m === 6) {
       const sd_start = (mo.m === startDate.getMonth()+1 && mo.year === startDate.getFullYear())
         ? startDate.getDate() : 1;
-      mo.lec1 = Math.max(0, 15 - sd_start + 1) * lpd;      // 1~15일 → 1차
+      mo.lec1 = Math.max(0, 15 - sd_start + 1) * lpd;
       const start2Day = start2차.getDate();
-      mo.lec2 = Math.max(0, 30 - start2Day + 1) * lpd;      // 마지막주 월요일~30 → 2차
-      mo.gapLec = Math.max(0, start2Day - 16) * lpd;        // 16~(start2Day-1) → 휴식
+      mo.lec2 = Math.max(0, 30 - start2Day + 1) * lpd;
+      mo.gapLec = Math.max(0, start2Day - 16) * lpd;
       mo.lec = mo.lec1 + mo.gapLec + mo.lec2;
       mo.ld  = mo.lec / lpd;
+      cap2_late += mo.lec2;
     } else {
-      mo.lec2 = mo.lec;                                     // 7월~ : 전부 2차
+      mo.lec2 = mo.lec;                                     // 7월~: 100% 2차
+      cap2_late += mo.lec2;
     }
     cap1 += mo.lec1;
-    cap2 += mo.lec2;
   });
 
   // ── 1차 배분 ────────────────────────────────────────────────────
@@ -973,16 +985,13 @@ function buildDongchaPlan() {
   if (c2obj) { c2obj.status = can2Obj ? 'full' : 'skipped'; c2obj.effective = can2Obj ? c2obj.needed : 0; }
   if (c2sub) { c2sub.status = can2Sub ? 'full' : 'skipped'; c2sub.effective = can2Sub ? c2sub.needed : 0; }
 
-  // 구간 A: 이론완성(seq11,12), 기초이론(seq14) — 6월 2차 용량 기준
-  const before_july_lec2 = months
-    .filter(mo => !(mo.year === examYear && mo.m >= 7))
-    .reduce((s, mo) => s + mo.lec2, 0);
+  // Phase A early: 이론완성(11,12), 기초이론(14) — Phase A 2차 용량 기준
   sorted2.filter(c => [11, 12, 14].includes(c.seq))
     .sort((a, b) => toKey2(a.openM||0) - toKey2(b.openM||0))
     .reduce((rem, c) => {
       if (rem >= c.needed) { c.status = 'full'; c.effective = c.needed; return rem - c.needed; }
       return rem;
-    }, before_july_lec2);
+    }, cap2_early);
 
   const alloc2 = sorted2;
 
@@ -1022,8 +1031,14 @@ function buildDongchaPlan() {
   }
   const track1 = makeTrack(alloc1, deadline1);
 
-  // 2차 트랙: 주력(핵심이론·마무리·동형·이론완성·기초) / 병행(단원별)
-  const mainSeqs2 = [3, 8, 9, 11, 12, 14];
+  // Phase A 2차 트랙: monthCap 없이 가능한 만큼 최대 진행 (경계에서 미완성 방지)
+  const track2_early = alloc2
+    .filter(c => [11, 12, 14].includes(c.seq) && c.status !== 'skipped')
+    .sort((a, b) => toKey2(a.openM||0) - toKey2(b.openM||0))
+    .map(c => ({ ...c, name: c.name.replace(/<br>/g,''), remaining: c.effective, total: c.effective }));
+
+  // Phase C 2차 트랙: 핵심이론(주력) + 단원별(병행)
+  const mainSeqs2 = [3, 8, 9];
   const sideSeqs2 = [4, 6];
   const mainTrack2 = makeTrack(alloc2.filter(c => mainSeqs2.includes(c.seq)), deadline2);
   const sideTrack2 = makeTrack(alloc2.filter(c => sideSeqs2.includes(c.seq)), deadline2);
@@ -1033,13 +1048,15 @@ function buildDongchaPlan() {
   const MAIN_RATIO2    = useConcurrent2 ? 144 / (144 + sideTotalEff2) : 1;
 
   // ── 월별 스케줄 채우기 ────────────────────────────────────────────
-  let ci1 = 0, ci_m2 = 0, ci_s2 = 0;
+  let ci1 = 0, ci2_early = 0, ci_m2 = 0, ci_s2 = 0;
   months.forEach(mo => {
     while (ci1 < track1.length && track1[ci1].remaining <= 0) ci1++;
+    while (ci2_early < track2_early.length && track2_early[ci2_early].remaining <= 0) ci2_early++;
     while (ci_m2 < mainTrack2.length && mainTrack2[ci_m2].remaining <= 0) ci_m2++;
     while (ci_s2 < sideTrack2.length && sideTrack2[ci_s2].remaining <= 0) ci_s2++;
     const sch = [];
     const moLec = mo.lec || 1;
+    const isPhaseA = mo.year < examYear || (mo.year === examYear && mo.m <= 3);
 
     // 1차 트랙
     if (mo.lec1 > 0 && ci1 < track1.length) {
@@ -1063,8 +1080,21 @@ function buildDongchaPlan() {
       sch.push({ name: '준비 기간', pct: Math.round(mo.gapLec / moLec * 100), rev: true });
     }
 
-    // 2차 트랙
-    if (mo.lec2 > 0) {
+    // Phase A 2차 트랙 (start ~ 3월)
+    if (isPhaseA && mo.lec2 > 0 && ci2_early < track2_early.length) {
+      let cap = mo.lec2;
+      while (cap > 0 && ci2_early < track2_early.length) {
+        if (!isOpen(track2_early[ci2_early].openM, mo.year, mo.m, examYear)) break;
+        const take = Math.min(track2_early[ci2_early].remaining, cap);
+        const pct  = Math.round(take / moLec * 100);
+        if (pct > 0) sch.push({ name: track2_early[ci2_early].name, pct, cat: '2차' });
+        track2_early[ci2_early].remaining -= take; cap -= take;
+        if (track2_early[ci2_early].remaining <= 0) ci2_early++;
+      }
+    }
+
+    // Phase C 2차 트랙 (late Jun ~ Sep)
+    if (!isPhaseA && mo.lec2 > 0) {
       const isCon2 = useConcurrent2 && mo.year === examYear && (mo.m === 7 || mo.m === 8);
       const mainCap2 = isCon2 ? Math.round(mo.lec2 * MAIN_RATIO2) : mo.lec2;
       const sideCap2 = isCon2 ? mo.lec2 - mainCap2 : 0;
