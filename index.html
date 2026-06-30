@@ -6,6 +6,8 @@
   <title>주택관리사 학습계획 플래너</title>
   <meta name="description" content="주택관리사 시험 목표에 맞는 개인별 학습계획을 자동으로 설계해 드립니다." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     :root {
       --orange: #ea580c;
@@ -362,6 +364,60 @@
     .dc-leg-1 { background: var(--orange-light); border: 2px solid var(--orange-mid); }
     .dc-leg-2 { background: #f5f3ff; border: 2px solid #ddd6fe; }
     .dc-leg-done { background: #f0fdf4; border: 2px solid #86efac; }
+    /* ═══ 사용 현황 모달 ═══ */
+    #stats-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 8000;
+      align-items: center; justify-content: center;
+    }
+    #stats-overlay.open { display: flex; }
+    .stats-box {
+      background: #fff; border-radius: 16px;
+      padding: 28px 28px 24px; width: min(440px, 92vw);
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+      position: relative; max-height: 90vh; overflow-y: auto;
+    }
+    .stats-close {
+      position: absolute; top: 14px; right: 16px;
+      background: none; border: none; font-size: 1.1rem;
+      color: var(--gray-400); cursor: pointer; line-height: 1; padding: 4px;
+    }
+    .stats-close:hover { color: var(--gray-900); }
+    .stats-title { font-size: 1.05rem; font-weight: 800; color: var(--gray-900); margin-bottom: 18px; }
+    .stats-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid var(--gray-200); font-size: .9rem;
+    }
+    .stats-row .s-lbl { color: var(--gray-500); }
+    .stats-row .s-val { font-weight: 700; color: var(--gray-900); font-size: 1rem; }
+    .stats-section-title {
+      font-size: .75rem; font-weight: 700; letter-spacing: .04em;
+      color: var(--orange); text-transform: uppercase; margin: 18px 0 8px;
+    }
+    .stats-target-row { display: flex; gap: 8px; margin-bottom: 4px; }
+    .stats-target-card {
+      flex: 1; text-align: center; background: var(--orange-light);
+      border-radius: 10px; padding: 10px 6px;
+    }
+    .stats-target-card .tc-lbl { font-size: .72rem; color: var(--orange); font-weight: 600; margin-bottom: 4px; }
+    .stats-target-card .tc-val { font-size: 1.3rem; font-weight: 800; color: var(--gray-900); }
+    .stats-daily-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    .stats-daily-table th {
+      color: var(--gray-500); font-weight: 600; padding: 4px 8px;
+      text-align: left; border-bottom: 1px solid var(--gray-200);
+    }
+    .stats-daily-table td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    .stats-daily-table td:not(:first-child),
+    .stats-daily-table th:not(:first-child) { text-align: right; }
+    .stats-daily-table .col-total { font-weight: 700; color: var(--orange); }
+    .stats-daily-table .col-target { color: #64748b; font-size: .8rem; }
+    .stats-loading { text-align: center; color: var(--gray-400); padding: 24px 0; font-size: .9rem; }
+    .stats-month-row { cursor: pointer; }
+    .stats-month-row:hover td { background: #fafaf9; }
+    .stats-month-chevron { display: inline-block; font-size: .62rem; margin-right: 6px; color: var(--gray-400); transition: transform .18s; }
+    .stats-month-chevron.open { transform: rotate(90deg); }
+    .stats-day-row td:first-child { color: #94a3b8; }
+    .stats-day-row td:last-child { color: #64748b; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -447,10 +503,40 @@
 </div>
 
 <div id="right-actions" style="position:fixed;right:12px;z-index:1000;display:flex;flex-direction:column;gap:8px;align-items:stretch;">
+  <button onclick="showStats()" style="
+    background:linear-gradient(135deg,#7c3aed,#8b5cf6);
+    color:#fff;border:2px solid rgba(255,255,255,.6);
+    border-radius:12px;padding:10px 14px;
+    font-size:.82rem;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 16px rgba(124,58,237,.3);
+    transition:all .15s;text-align:center;min-width:130px;"
+    onmouseover="this.style.filter='brightness(1.1)'"
+    onmouseout="this.style.filter=''">
+    📊 사용 현황
+  </button>
   <div id="my-plan-btn" onclick="goMyPlan()" class="my-plan-btn" style="display:none;
     background:linear-gradient(135deg,#7c2d12,#ea580c);
     border-color:rgba(255,255,255,.6);
     box-shadow:0 4px 16px rgba(234,88,12,.3);"></div>
+  <button id="download-btn" onclick="downloadPDF(this)" style="display:none;
+    background:linear-gradient(135deg,#059669,#10b981);
+    color:#fff;border:2px solid rgba(255,255,255,.6);
+    border-radius:12px;padding:10px 14px;
+    font-size:.82rem;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 16px rgba(16,185,129,.3);
+    transition:all .15s;text-align:center;min-width:130px;"
+    onmouseover="this.style.filter='brightness(1.1)'"
+    onmouseout="this.style.filter=''">
+    ⬇ 계획 다운 받기
+  </button>
+</div>
+
+<div id="stats-overlay" onclick="if(event.target===this)closeStats()">
+  <div class="stats-box">
+    <button class="stats-close" onclick="closeStats()">✕</button>
+    <div class="stats-title">📊 사용자 현황</div>
+    <div id="stats-content"><div class="stats-loading">불러오는 중…</div></div>
+  </div>
 </div>
 
 <div id="gantt-tooltip"></div>
@@ -1158,6 +1244,10 @@ function generate() {
   const el = document.getElementById('results');
   el.style.display = 'block';
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const dlBtn = document.getElementById('download-btn');
+  if (dlBtn) dlBtn.style.display = 'block';
+  trackUsage();
 }
 
 /* ═══════════════ GANTT ═══════════════ */
@@ -1697,6 +1787,208 @@ function goMyPlan() {
   updateBanner();
   updateHoursHint();
   generate();
+}
+
+/* ═══════════════ 사용 현황 ═══════════════ */
+const STATS_KEY = 'jtm_stats';
+
+function loadStats() {
+  try {
+    const raw = localStorage.getItem(STATS_KEY);
+    if (!raw) return { total: 0, byTarget: {'1차':0,'2차':0,'동차':0}, daily: {} };
+    return JSON.parse(raw);
+  } catch { return { total: 0, byTarget: {'1차':0,'2차':0,'동차':0}, daily: {} }; }
+}
+
+function saveStats(data) {
+  localStorage.setItem(STATS_KEY, JSON.stringify(data));
+}
+
+function trackUsage() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const today = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const data = loadStats();
+  data.total = (data.total || 0) + 1;
+  const tgt = S.target || '';
+  if (tgt in data.byTarget) data.byTarget[tgt]++;
+  if (!data.daily[today]) data.daily[today] = { total: 0, byTarget: {'1차':0,'2차':0,'동차':0} };
+  data.daily[today].total++;
+  if (tgt in data.daily[today].byTarget) data.daily[today].byTarget[tgt]++;
+  saveStats(data);
+}
+
+function showStats() {
+  document.getElementById('stats-overlay').classList.add('open');
+  const data = loadStats();
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const todayKey = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const todayEntry = (data.daily || {})[todayKey];
+  data.today = todayEntry ? (todayEntry.total || 0) : 0;
+  renderStatsModal(data);
+}
+
+function closeStats() {
+  document.getElementById('stats-overlay').classList.remove('open');
+}
+
+function renderStatsModal(data) {
+  const bt = data.byTarget || {};
+  const daily = data.daily || {};
+  const monthMap = {};
+  Object.entries(daily).forEach(([dateStr, entry]) => {
+    const ym = dateStr.slice(0, 7);
+    if (!monthMap[ym]) monthMap[ym] = { total: 0, byTarget: {'1차':0,'2차':0,'동차':0}, days: [] };
+    const isObj = typeof entry === 'object' && entry !== null;
+    const dayTotal = isObj ? (entry.total||0) : (entry||0);
+    const dayBt = (isObj && entry.byTarget) ? entry.byTarget : null;
+    monthMap[ym].total += dayTotal;
+    if (dayBt) {
+      ['1차','2차','동차'].forEach(k => { monthMap[ym].byTarget[k] = (monthMap[ym].byTarget[k]||0) + (dayBt[k]||0); });
+    }
+    monthMap[ym].days.push({ date: dateStr, total: dayTotal, byTarget: dayBt });
+  });
+  const months = Object.keys(monthMap).sort().reverse().map(ym => {
+    const [y, m] = ym.split('-');
+    monthMap[ym].days.sort((a, b) => b.date.localeCompare(a.date));
+    return { ym, label: `${y}년 ${parseInt(m)}월`, ...monthMap[ym] };
+  });
+  const dash = '<span style="color:#cbd5e1">-</span>';
+  const fbt = (obj, k) => obj ? (obj[k]||0) : dash;
+  const monthRows = months.length ? months.map(mo => {
+    const dayRows = mo.days.map(d => {
+      const dd = parseInt(d.date.split('-')[2]);
+      return `<tr class="stats-day-row" data-ym="${mo.ym}" style="display:none">
+        <td style="padding-left:26px;font-size:.8rem">∟ ${dd}일</td>
+        <td class="col-total">${d.total}건</td>
+        <td class="col-target">${fbt(d.byTarget,'1차')}</td>
+        <td class="col-target">${fbt(d.byTarget,'2차')}</td>
+        <td class="col-target">${fbt(d.byTarget,'동차')}</td>
+      </tr>`;
+    }).join('');
+    return `<tr class="stats-month-row" onclick="toggleMonthRows('${mo.ym}',this)">
+        <td><span class="stats-month-chevron">▶</span>${mo.label}</td>
+        <td class="col-total">${mo.total}건</td>
+        <td class="col-target">${mo.byTarget['1차']||0}</td>
+        <td class="col-target">${mo.byTarget['2차']||0}</td>
+        <td class="col-target">${mo.byTarget['동차']||0}</td>
+      </tr>${dayRows}`;
+  }).join('') : '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px">데이터 없음</td></tr>';
+
+  document.getElementById('stats-content').innerHTML = `
+    <div class="stats-row">
+      <span class="s-lbl">오늘 계획 생성</span>
+      <span class="s-val">${data.today ?? 0}건</span>
+    </div>
+    <div class="stats-row">
+      <span class="s-lbl">전체 누적</span>
+      <span class="s-val">${data.total ?? 0}건</span>
+    </div>
+    <div class="stats-section-title">목표별 현황</div>
+    <div class="stats-target-row">
+      <div class="stats-target-card"><div class="tc-lbl">1차</div><div class="tc-val">${bt['1차']??0}</div></div>
+      <div class="stats-target-card"><div class="tc-lbl">2차</div><div class="tc-val">${bt['2차']??0}</div></div>
+      <div class="stats-target-card"><div class="tc-lbl">동차</div><div class="tc-val">${bt['동차']??0}</div></div>
+    </div>
+    <div class="stats-section-title">월/일별 누적현황</div>
+    <table class="stats-daily-table">
+      <thead><tr><th>월/일</th><th>총</th><th>1차</th><th>2차</th><th>동차</th></tr></thead>
+      <tbody>${monthRows}</tbody>
+    </table>`;
+}
+
+function toggleMonthRows(ym, rowEl) {
+  const chevron = rowEl.querySelector('.stats-month-chevron');
+  const isOpen = chevron.classList.contains('open');
+  chevron.classList.toggle('open', !isOpen);
+  document.querySelectorAll(`.stats-day-row[data-ym="${ym}"]`).forEach(r => {
+    r.style.display = isOpen ? 'none' : 'table-row';
+  });
+}
+
+/* ═══════════════ 계획 다운 받기 ═══════════════ */
+async function downloadPDF(btn) {
+  if (!window.html2canvas || !window.jspdf) {
+    alert('PDF 생성 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.');
+    return;
+  }
+  const orig = btn.innerHTML;
+  btn.innerHTML = '⏳ 생성 중...';
+  btn.disabled = true;
+
+  try {
+    const tLbl = S.target || '';
+    const hLbl = S.hours >= 7 ? '6시간+' : S.hours + '시간';
+    const dStr = S.startDate ? S.startDate.toLocaleDateString('ko-KR', {month:'numeric',day:'numeric'}) : '';
+
+    const { jsPDF } = window.jspdf;
+    const A4_W = 210, A4_H = 297;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // Page 1: 요약 (stat-grid + gantt)
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:820px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;margin:0;padding:0;';
+
+    wrap.innerHTML = `<div style="background:linear-gradient(135deg,#7c2d12,#ea580c);color:#fff;padding:16px 28px;text-align:center;">
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px;">🏠 주택관리사 학습계획</div>
+      <div style="font-size:12px;opacity:.85;">${tLbl} &nbsp;·&nbsp; ${dStr} 시작 &nbsp;·&nbsp; 하루 ${hLbl}</div>
+    </div>`;
+
+    const statClone = document.getElementById('stat-grid').cloneNode(true);
+    statClone.style.cssText = 'display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:16px 28px 0;';
+    wrap.appendChild(statClone);
+
+    const ganttEl = document.getElementById('gantt-chart');
+    if (ganttEl && ganttEl.innerHTML.trim()) {
+      const ganttClone = ganttEl.cloneNode(true);
+      const ganttSec = document.createElement('div');
+      ganttSec.style.cssText = 'padding:16px 28px 8px;';
+      ganttSec.innerHTML = '<div style="font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:12px;">📚 추천 커리큘럼 학습 로드맵</div>';
+      ganttSec.appendChild(ganttClone);
+      wrap.appendChild(ganttSec);
+    }
+
+    const today = new Date().toLocaleDateString('ko-KR');
+    wrap.insertAdjacentHTML('beforeend', `<div style="text-align:center;padding:10px;font-size:10px;color:#94a3b8;border-top:1px solid #e5e7eb;margin-top:12px;">
+      생성일: ${today} &nbsp;·&nbsp; 주택관리사 학습계획 플래너
+    </div>`);
+
+    document.body.appendChild(wrap);
+    const canvas1 = await html2canvas(wrap, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+    document.body.removeChild(wrap);
+
+    const imgH1 = A4_W * (canvas1.height / canvas1.width);
+    pdf.addImage(canvas1.toDataURL('image/png'), 'PNG', 0, 0, A4_W, Math.min(imgH1, A4_H));
+
+    // Page 2: 월별 학습 진도 (mo-grid)
+    const moEl = document.getElementById('mo-grid');
+    if (moEl && moEl.innerHTML.trim()) {
+      const moWrap = document.createElement('div');
+      moWrap.style.cssText = 'width:820px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;padding:20px 28px;';
+      moWrap.innerHTML = '<div style="font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:14px;">🗓️ 월별 학습 진도</div>';
+      const moClone = moEl.cloneNode(true);
+      moWrap.appendChild(moClone);
+      document.body.appendChild(moWrap);
+      const canvas2 = await html2canvas(moWrap, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+      document.body.removeChild(moWrap);
+
+      pdf.addPage('a4', 'l');
+      const LS_W = 297, LS_H = 210, LS_M = 12;
+      const imgW2 = LS_W - LS_M * 2;
+      const imgH2 = imgW2 * (canvas2.height / canvas2.width);
+      pdf.addImage(canvas2.toDataURL('image/png'), 'PNG', LS_M, (LS_H - Math.min(imgH2, LS_H - LS_M * 2)) / 2, imgW2, Math.min(imgH2, LS_H - LS_M * 2));
+    }
+
+    const fname = `주택관리사_학습계획_${tLbl}_${dStr.replace(/\./g,'').replace(/ /g,'')}시작.pdf`;
+    pdf.save(fname);
+  } catch(e) {
+    console.error('PDF 생성 오류:', e);
+    alert('PDF 생성 중 오류가 발생했습니다.');
+  } finally {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
