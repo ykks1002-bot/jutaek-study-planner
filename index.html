@@ -945,10 +945,12 @@ function buildPlan2차() {
 
   // 우선순위 기반 배분
   const sorted = CURRS_2.map(c => ({ ...c, needed: c.total })).sort((a, b) => a.pri - b.pri);
-  let rem = capacity;
+  let rem = capacity, cascadeSkip = false;
   sorted.forEach(c => {
-    if (rem >= c.needed) { c.status = 'full';    c.effective = c.needed; rem -= c.needed; }
+    if (cascadeSkip) { c.status = 'skipped'; c.effective = 0; return; }
+    if (rem >= c.needed) { c.status = 'full'; c.effective = c.needed; rem -= c.needed; }
     else                 { c.status = 'skipped'; c.effective = 0; }
+    if (c.seq === 4 && c.status === 'skipped') cascadeSkip = true;
   });
   const result    = CURRS_2.map(orig => sorted.find(c => c.seq === orig.seq));
   const fullCount = result.filter(c => c.status === 'full').length;
@@ -972,13 +974,22 @@ function buildPlan2차() {
     .sort((a, b) => toKey(a.openM||0) - toKey(b.openM||0) || a.pri - b.pri)
     .map(c => ({ ...c, remaining: c.effective }));
 
-  // 병행 모드 여부: 핵심이론 + 단원별(객관식) 모두 active일 때만
-  const useConcurrent = mainTrack.some(c => c.seq === 6) && sideTrack.length > 0;
+  // 병행 모드: 7~8월 용량이 핵심이론(144)+단원별객(150) 합산 이상일 때만 concurrent
+  const 핵심이론C = result.find(c => c.seq === 6);
+  const 단원객C   = result.find(c => c.seq === 4);
+  const examJulyStart = new Date(examYear, 6, 1);
+  const actualJulyStart = startDate > examJulyStart ? startDate : examJulyStart;
+  const julyDays = 31 - actualJulyStart.getDate() + 1;
+  const july_aug_lec = (julyDays + 31) * lpd;
+  const useConcurrent = 단원객C.status !== 'skipped'
+    && mainTrack.some(c => c.seq === 6)
+    && july_aug_lec >= (핵심이론C.total + 단원객C.total);
+  const MAIN_RATIO = useConcurrent ? 핵심이론C.total / (핵심이론C.total + 단원객C.total) : 1;
 
   let ci_m = 0, ci_s = 0;
   months.forEach(mo => {
     const isConcurrent = useConcurrent && (mo.m === 7 || mo.m === 8) && mo.year === examYear;
-    const mainCap = isConcurrent ? Math.round(mo.contentLec * 2/3) : mo.contentLec;
+    const mainCap = isConcurrent ? Math.round(mo.contentLec * MAIN_RATIO) : mo.contentLec;
     const sideCap = isConcurrent ? mo.contentLec - mainCap : 0;
     const sch = [];
 
