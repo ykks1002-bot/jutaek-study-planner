@@ -1923,51 +1923,206 @@ function toggleMonthRows(ym, rowEl) {
 }
 
 /* ═══════════════ 계획 다운 받기 ═══════════════ */
+const STUDY_QUOTES = [
+  { text: "천 리 길도 한 걸음부터", author: "한국 속담" },
+  { text: "시작이 반이다", author: "아리스토텔레스" },
+  { text: "오늘 할 일을 내일로 미루지 마라", author: "벤자민 프랭클린" },
+  { text: "성공은 준비된 자에게 찾아온다", author: "루이 파스퇴르" },
+  { text: "인내와 끈기는 모든 것을 이긴다", author: "아이작 뉴턴" },
+  { text: "노력은 결코 배신하지 않는다", author: "" },
+  { text: "작은 목표를 매일 달성하면 큰 꿈이 이루어진다", author: "" },
+  { text: "포기하지 않는 자만이 성공을 거머쥔다", author: "" },
+  { text: "지금 이 순간의 노력이 미래의 나를 만든다", author: "" },
+  { text: "꿈을 이루기 위한 노력 자체가 이미 성공이다", author: "" },
+  { text: "매일 조금씩, 꾸준히 나아가면 반드시 목표에 다가선다", author: "" },
+  { text: "자신을 믿어라. 당신은 할 수 있다", author: "시어도어 루즈벨트" },
+];
+
+function buildMonthDays(mo, lpd) {
+  const { m, year, sd, lec, schedule } = mo;
+  const daysInM = new Date(year, m, 0).getDate();
+  const startDay = daysInM - sd + 1;
+  const endDay   = startDay + sd - 1;
+
+  const queue = [];
+  (schedule || []).forEach(it => {
+    const itemLec = Math.round(it.pct / 100 * lec);
+    if (itemLec > 0) queue.push({
+      name: it.name.replace(/<br>/g, ''),
+      lec: itemLec, cat: it.cat, rev: !!it.rev
+    });
+  });
+
+  const dayMap = new Map();
+  let qi = 0;
+  let rem = queue[0]?.lec || 0;
+
+  for (let d = startDay; d <= endDay; d++) {
+    const dayItems = [];
+    let cap = lpd;
+    while (cap > 0 && qi < queue.length) {
+      const take = Math.min(rem, cap);
+      if (take > 0) {
+        const last = dayItems[dayItems.length - 1];
+        if (last && last.name === queue[qi].name) last.lec += take;
+        else dayItems.push({ name: queue[qi].name, lec: take, cat: queue[qi].cat, rev: queue[qi].rev });
+      }
+      rem -= take; cap -= take;
+      if (rem <= 0) { qi++; rem = qi < queue.length ? queue[qi].lec : 0; }
+    }
+    dayMap.set(d, dayItems);
+  }
+  return { dayMap, startDay, endDay, daysInM };
+}
+
+function buildMonthPageHTML(mo, lpd, quote, planInfo) {
+  const { m, year, sd, lec } = mo;
+  const { tLbl, hLbl, examDate1, examDate2 } = planInfo;
+  const daysInM = new Date(year, m, 0).getDate();
+  const { dayMap, startDay, endDay } = buildMonthDays(mo, lpd);
+
+  const MONTH_KR = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const DAY_KR   = ['월','화','수','목','금','토','일'];
+
+  const isExam1Mo = examDate1 && examDate1.getFullYear() === year && examDate1.getMonth()+1 === m;
+  const isExam2Mo = examDate2 && examDate2.getFullYear() === year && examDate2.getMonth()+1 === m;
+  const examDay   = isExam1Mo ? examDate1.getDate() : isExam2Mo ? examDate2.getDate() : null;
+  const headerGrad = isExam2Mo
+    ? 'linear-gradient(135deg,#7f1d1d,#dc2626)'
+    : 'linear-gradient(135deg,#7c2d12,#ea580c)';
+
+  function itemStyle(cat) {
+    if (cat === '2차') return { bg: '#f5f3ff', border: '#7c3aed', text: '#5b21b6' };
+    return { bg: '#fff7ed', border: '#ea580c', text: '#9a3412' };
+  }
+
+  const firstDow  = (new Date(year, m-1, 1).getDay() + 6) % 7;
+  const numWeeks  = Math.ceil((firstDow + daysInM) / 7);
+  const CELL_H    = Math.floor(560 / numWeeks);
+
+  let calRows = '';
+  let dayNum = 1 - firstDow;
+  while (dayNum <= daysInM) {
+    calRows += '<tr>';
+    for (let d = 0; d < 7; d++) {
+      const dn = dayNum + d;
+      if (dn < 1 || dn > daysInM) {
+        calRows += '<td style="background:#f8fafc;border:1px solid #e5e7eb;"></td>';
+      } else {
+        const isStudyDay  = dn >= startDay && dn <= endDay;
+        const isExam      = examDay !== null && dn === examDay;
+        const isPostExam  = examDay !== null && dn > examDay;
+        const dayItems    = dayMap.get(dn) || [];
+        const isSat = d === 5, isSun = d === 6;
+        const bg          = isExam ? '#fef2f2' : isPostExam ? '#f9fafb' : isStudyDay ? '#fff' : '#fafafa';
+        const cellBorder  = isExam ? '1.5px solid #ef4444' : '1px solid #e5e7eb';
+        const dnColor     = isSun ? '#ef4444' : isSat ? '#ea580c' : '#374151';
+
+        let itemsHTML = '';
+        if (isExam) {
+          itemsHTML = '<div style="margin-top:4px;background:#fee2e2;border:1px solid #fca5a5;border-radius:5px;padding:3px 5px;text-align:center;font-size:9.5px;font-weight:700;color:#dc2626;">🎯 시험일</div>';
+        } else if (!isPostExam && isStudyDay && dayItems.length > 0) {
+          dayItems.forEach(it => {
+            const cs   = itemStyle(it.cat);
+            const nm   = it.name.length > 11 ? it.name.slice(0,10)+'…' : it.name;
+            const chip = it.rev ? '#f0fdf4' : cs.bg;
+            const brd  = it.rev ? '#86efac' : cs.border;
+            const txt  = it.rev ? '#15803d' : cs.text;
+            itemsHTML += `<div style="margin-top:3px;background:${chip};border:1px solid ${brd};border-radius:5px;padding:2px 5px;">
+              <div style="font-size:9px;font-weight:700;color:${txt};line-height:1.3;">${nm}</div>
+              <div style="font-size:8px;color:#64748b;">${it.lec}강</div>
+            </div>`;
+          });
+        }
+
+        calRows += `<td style="background:${bg};border:${cellBorder};padding:4px 4px 3px;vertical-align:top;height:${CELL_H}px;">
+          <div style="font-size:11px;font-weight:700;color:${dnColor};">${dn}</div>
+          ${itemsHTML}
+        </td>`;
+      }
+    }
+    calRows += '</tr>';
+    dayNum += 7;
+  }
+
+  const examInfo = isExam2Mo ? ` · 시험일 ${examDay}일` : isExam1Mo ? ` · 1차 시험 ${examDay}일` : '';
+  return `<div style="width:1056px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Apple SD Gothic Neo','Noto Sans KR',sans-serif;margin:0;padding:0;">
+    <div style="background:${headerGrad};color:#fff;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:22px;font-weight:900;letter-spacing:-.5px;">${year}년 ${MONTH_KR[m-1]}</div>
+        <div style="font-size:12px;opacity:.85;margin-top:3px;">${tLbl} 목표 · 하루 ${hLbl} · ${sd}일 학습 · 총 ${sd*lpd}강${examInfo}</div>
+      </div>
+      <div style="text-align:right;max-width:400px;">
+        <div style="font-size:10px;opacity:.7;margin-bottom:4px;letter-spacing:.05em;">📖 이달의 명언</div>
+        <div style="font-size:14px;font-weight:700;font-style:italic;line-height:1.4;">"${quote.text}"</div>
+        ${quote.author ? `<div style="font-size:11px;opacity:.75;margin-top:3px;">— ${quote.author}</div>` : ''}
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+      <thead><tr>${DAY_KR.map((d,i) => {
+        const c = i===6?'#ef4444':i===5?'#ea580c':'#374151';
+        return `<th style="padding:6px 4px;text-align:center;font-size:12px;font-weight:700;color:${c};background:#f8fafc;border:1px solid #e5e7eb;">${d}</th>`;
+      }).join('')}</tr></thead>
+      <tbody>${calRows}</tbody>
+    </table>
+  </div>`;
+}
+
 async function downloadPDF(btn) {
   if (!window.html2canvas || !window.jspdf) {
     alert('PDF 생성 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.');
     return;
   }
   const orig = btn.innerHTML;
-  btn.innerHTML = '⏳ 생성 중...';
   btn.disabled = true;
 
   try {
+    const plan = window._plan;
     const tLbl = S.target || '';
     const hLbl = S.hours >= 7 ? '6시간+' : S.hours + '시간';
     const dStr = S.startDate ? S.startDate.toLocaleDateString('ko-KR', {month:'numeric',day:'numeric'}) : '';
+    const examDate1 = S.target !== '2차' ? EXAM_1[S.year] : null;
+    const examDate2 = S.target !== '1차' ? EXAM_2[S.year] : null;
+    const planInfo  = { tLbl, hLbl, examDate1, examDate2 };
 
     const { jsPDF } = window.jspdf;
-    const A4_W = 210, A4_H = 297;
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const A4_W = 210, A4_H = 297;
 
-    // Page 1: 요약 (stat-grid + gantt)
+    // ── Page 1: Portrait — 로드맵 + 나의 학습 현황 ──────────────
+    btn.innerHTML = `⏳ 1/${plan.months.length + 1}`;
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'width:820px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;margin:0;padding:0;';
+    wrap.style.cssText = 'position:absolute;left:-9999px;top:0;width:820px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;';
 
     wrap.innerHTML = `<div style="background:linear-gradient(135deg,#7c2d12,#ea580c);color:#fff;padding:16px 28px;text-align:center;">
       <div style="font-size:18px;font-weight:800;margin-bottom:4px;">🏠 주택관리사 학습계획</div>
-      <div style="font-size:12px;opacity:.85;">${tLbl} &nbsp;·&nbsp; ${dStr} 시작 &nbsp;·&nbsp; 하루 ${hLbl}</div>
+      <div style="font-size:12px;opacity:.85;">${tLbl} 목표 &nbsp;·&nbsp; ${dStr} 시작 &nbsp;·&nbsp; 하루 ${hLbl}</div>
     </div>`;
-
-    const statClone = document.getElementById('stat-grid').cloneNode(true);
-    statClone.style.cssText = 'display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:16px 28px 0;';
-    wrap.appendChild(statClone);
 
     const ganttEl = document.getElementById('gantt-chart');
     if (ganttEl && ganttEl.innerHTML.trim()) {
-      const ganttClone = ganttEl.cloneNode(true);
       const ganttSec = document.createElement('div');
       ganttSec.style.cssText = 'padding:16px 28px 8px;';
       ganttSec.innerHTML = '<div style="font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:12px;">📚 추천 커리큘럼 학습 로드맵</div>';
-      ganttSec.appendChild(ganttClone);
+      ganttSec.appendChild(ganttEl.cloneNode(true));
       wrap.appendChild(ganttSec);
     }
 
-    const today = new Date().toLocaleDateString('ko-KR');
-    wrap.insertAdjacentHTML('beforeend', `<div style="text-align:center;padding:10px;font-size:10px;color:#94a3b8;border-top:1px solid #e5e7eb;margin-top:12px;">
-      생성일: ${today} &nbsp;·&nbsp; 주택관리사 학습계획 플래너
-    </div>`);
+    const statEl = document.getElementById('stat-grid');
+    if (statEl) {
+      const statSec = document.createElement('div');
+      statSec.style.cssText = 'padding:8px 28px 16px;';
+      statSec.innerHTML = '<div style="font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:12px;">📊 나의 학습 현황</div>';
+      const sc = statEl.cloneNode(true);
+      sc.style.cssText = 'display:grid;grid-template-columns:repeat(6,1fr);gap:10px;';
+      statSec.appendChild(sc);
+      wrap.appendChild(statSec);
+    }
+
+    wrap.insertAdjacentHTML('beforeend',
+      `<div style="text-align:center;padding:10px;font-size:10px;color:#94a3b8;border-top:1px solid #e5e7eb;">
+        생성일: ${new Date().toLocaleDateString('ko-KR')} · 주택관리사 학습계획 플래너
+      </div>`);
 
     document.body.appendChild(wrap);
     const canvas1 = await html2canvas(wrap, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
@@ -1976,27 +2131,27 @@ async function downloadPDF(btn) {
     const imgH1 = A4_W * (canvas1.height / canvas1.width);
     pdf.addImage(canvas1.toDataURL('image/png'), 'PNG', 0, 0, A4_W, Math.min(imgH1, A4_H));
 
-    // Page 2: 월별 학습 진도 (mo-grid)
-    const moEl = document.getElementById('mo-grid');
-    if (moEl && moEl.innerHTML.trim()) {
-      const moWrap = document.createElement('div');
-      moWrap.style.cssText = 'width:820px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;padding:20px 28px;';
-      moWrap.innerHTML = '<div style="font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:14px;">🗓️ 월별 학습 진도</div>';
-      const moClone = moEl.cloneNode(true);
-      moWrap.appendChild(moClone);
-      document.body.appendChild(moWrap);
-      const canvas2 = await html2canvas(moWrap, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
-      document.body.removeChild(moWrap);
+    // ── Pages 2+: Landscape — 월별 학습계획 캘린더 ────────────────
+    const LS_W = 297, LS_H = 210, LS_M = 8;
+    for (let i = 0; i < plan.months.length; i++) {
+      btn.innerHTML = `⏳ ${i+2}/${plan.months.length+1}`;
+      const mo    = plan.months[i];
+      const quote = STUDY_QUOTES[i % STUDY_QUOTES.length];
+      const mDiv  = document.createElement('div');
+      mDiv.style.cssText = 'position:absolute;left:-9999px;top:0;display:inline-block;';
+      mDiv.innerHTML = buildMonthPageHTML(mo, plan.lpd, quote, planInfo);
+      document.body.appendChild(mDiv);
+      const mCanvas = await html2canvas(mDiv, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+      document.body.removeChild(mDiv);
 
       pdf.addPage('a4', 'l');
-      const LS_W = 297, LS_H = 210, LS_M = 12;
-      const imgW2 = LS_W - LS_M * 2;
-      const imgH2 = imgW2 * (canvas2.height / canvas2.width);
-      pdf.addImage(canvas2.toDataURL('image/png'), 'PNG', LS_M, (LS_H - Math.min(imgH2, LS_H - LS_M * 2)) / 2, imgW2, Math.min(imgH2, LS_H - LS_M * 2));
+      const imgW = LS_W - LS_M * 2;
+      const imgH = imgW * (mCanvas.height / mCanvas.width);
+      const imgY = Math.max(LS_M, (LS_H - Math.min(imgH, LS_H - LS_M * 2)) / 2);
+      pdf.addImage(mCanvas.toDataURL('image/png'), 'PNG', LS_M, imgY, imgW, Math.min(imgH, LS_H - LS_M * 2));
     }
 
-    const fname = `주택관리사_학습계획_${tLbl}_${dStr.replace(/\./g,'').replace(/ /g,'')}시작.pdf`;
-    pdf.save(fname);
+    pdf.save(`주택관리사_학습계획_${tLbl}_${dStr.replace(/\./g,'').replace(/ /g,'')}시작.pdf`);
   } catch(e) {
     console.error('PDF 생성 오류:', e);
     alert('PDF 생성 중 오류가 발생했습니다.');
