@@ -942,25 +942,49 @@ function buildPlan2차() {
 
   const capacity    = totalDays * lpd;
   const totalNeeded = CURRS_2.reduce((s, c) => s + c.total, 0);
+  const toKey = m => m < 0 ? (examYear-1)*12+(-m) : examYear*12+(m||0);
 
-  // 우선순위 기반 배분
-  const sorted = CURRS_2.map(c => ({ ...c, needed: c.total })).sort((a, b) => a.pri - b.pri);
-  let rem = capacity, cascadeSkip = false;
-  sorted.forEach(c => {
-    if (cascadeSkip) { c.status = 'skipped'; c.effective = 0; return; }
-    if (rem >= c.needed) { c.status = 'full'; c.effective = c.needed; rem -= c.needed; }
-    else                 { c.status = 'skipped'; c.effective = 0; }
-    if (c.seq === 4 && c.status === 'skipped') cascadeSkip = true;
+  // ── 구간별 용량 계산 ──────────────────────────────────────────
+  const examJulyStart = new Date(examYear, 6, 1);
+  const actualJulyStart = startDate > examJulyStart ? startDate : examJulyStart;
+  const julyDays = 31 - actualJulyStart.getDate() + 1;
+  const july_aug_lec   = (julyDays + 31) * lpd;          // 7~8월 실제 강의 수
+  const before_july_lec = months                          // 7월 이전 강의 수
+    .filter(mo => !(mo.year === examYear && mo.m >= 7))
+    .reduce((s, mo) => s + mo.lec, 0);
+
+  // ── 단원별 7~8월 내 완료 가능 여부 ───────────────────────────
+  const canObject  = july_aug_lec >= 144 + 150;           // ≥294강
+  const canSubject = july_aug_lec >= 144 + 150 + 56;      // ≥350강
+
+  // ── 3구간 배분 ────────────────────────────────────────────────
+  const sorted = CURRS_2.map(c => ({ ...c, needed: c.total, status: 'skipped', effective: 0 }));
+
+  // 구간 A — 7월 이전 항목 (기초이론·이론완성): before_july_lec 범위, openM 순
+  sorted.filter(c => [1,2,3].includes(c.seq))
+    .sort((a, b) => toKey(a.openM||0) - toKey(b.openM||0))
+    .reduce((rem, c) => {
+      if (rem >= c.needed) { c.status = 'full'; c.effective = c.needed; return rem - c.needed; }
+      return rem;
+    }, before_july_lec);
+
+  // 구간 B — 핵심이론·마무리100선·동형모의고사: 항상 배분
+  [6, 7, 8].forEach(seq => {
+    const c = sorted.find(x => x.seq === seq);
+    c.status = 'full'; c.effective = c.needed;
   });
+
+  // 구간 C — 단원별 문제풀이: 7~8월 내 완료 가능 여부 기준
+  const c4 = sorted.find(c => c.seq === 4);
+  const c5 = sorted.find(c => c.seq === 5);
+  c4.status = canObject  ? 'full' : 'skipped';  c4.effective = canObject  ? c4.needed : 0;
+  c5.status = canSubject ? 'full' : 'skipped';  c5.effective = canSubject ? c5.needed : 0;
+
   const result    = CURRS_2.map(orig => sorted.find(c => c.seq === orig.seq));
   const fullCount = result.filter(c => c.status === 'full').length;
 
-  const effectiveTotal = result.filter(c => c.status !== 'skipped').reduce((s, c) => s + c.effective, 0);
-  const totalCap    = months.reduce((s, mo) => s + mo.lec, 0);
-  const contentRatio = (effectiveTotal > 0 && effectiveTotal < totalCap) ? effectiveTotal / totalCap : 1;
-  months.forEach(mo => { mo.contentLec = Math.max(1, Math.round(mo.lec * contentRatio)); });
-
-  const toKey = m => m < 0 ? (examYear-1)*12+(-m) : examYear*12+(m||0);
+  // contentLec = 월 원시 용량 그대로 (9월 여유는 최종복습으로 표시)
+  months.forEach(mo => { mo.contentLec = mo.lec; });
 
   // 주력 트랙: 이론완성 계열 + 핵심이론 + 마무리100선 + 동형모의고사
   const mainTrack = result
@@ -974,17 +998,10 @@ function buildPlan2차() {
     .sort((a, b) => toKey(a.openM||0) - toKey(b.openM||0) || a.pri - b.pri)
     .map(c => ({ ...c, remaining: c.effective }));
 
-  // 병행 모드: 7~8월 용량이 핵심이론(144)+단원별객(150) 합산 이상일 때만 concurrent
-  const 핵심이론C = result.find(c => c.seq === 6);
-  const 단원객C   = result.find(c => c.seq === 4);
-  const examJulyStart = new Date(examYear, 6, 1);
-  const actualJulyStart = startDate > examJulyStart ? startDate : examJulyStart;
-  const julyDays = 31 - actualJulyStart.getDate() + 1;
-  const july_aug_lec = (julyDays + 31) * lpd;
-  const useConcurrent = 단원객C.status !== 'skipped'
-    && mainTrack.some(c => c.seq === 6)
-    && july_aug_lec >= (핵심이론C.total + 단원객C.total);
-  const MAIN_RATIO = useConcurrent ? 핵심이론C.total / (핵심이론C.total + 단원객C.total) : 1;
+  // 병행 모드: side track 존재 시 concurrent (july_aug_lec로 이미 검증됨)
+  const sideTotalEff  = sideTrack.reduce((s, c) => s + c.effective, 0);
+  const useConcurrent = sideTotalEff > 0 && mainTrack.some(c => c.seq === 6);
+  const MAIN_RATIO    = useConcurrent ? 144 / (144 + sideTotalEff) : 1;
 
   let ci_m = 0, ci_s = 0;
   months.forEach(mo => {
@@ -994,13 +1011,11 @@ function buildPlan2차() {
     const sch = [];
 
     // 주력 트랙 스케줄링
-    let mainLeftover = 0;
     {
       let cap = mainCap;
       while (cap > 0 && ci_m < mainTrack.length) {
         if (!isOpen(mainTrack[ci_m].openM, mo.year, mo.m, examYear)) {
           sch.push({ name: '부족한 과목 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
-          cap = 0;
           break;
         }
         const take = Math.min(mainTrack[ci_m].remaining, cap);
@@ -1010,13 +1025,13 @@ function buildPlan2차() {
         cap -= take;
         if (mainTrack[ci_m].remaining <= 0) ci_m++;
       }
-      mainLeftover = cap;
+      if (cap > 0 && ci_m >= mainTrack.length)
+        sch.push({ name: '전 과정 최종 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
     }
 
-    // 병행 트랙: 7~8월은 비율 할당, 그 외 월은 주력 완료 후 잔여 용량 활용
-    {
-      const sideCapForMonth = isConcurrent ? sideCap : mainLeftover;
-      let cap = sideCapForMonth;
+    // 병행 트랙: 7~8월 한정
+    if (isConcurrent && sideCap > 0) {
+      let cap = sideCap;
       while (cap > 0 && ci_s < sideTrack.length) {
         if (!isOpen(sideTrack[ci_s].openM, mo.year, mo.m, examYear)) break;
         const take = Math.min(sideTrack[ci_s].remaining, cap);
@@ -1026,8 +1041,6 @@ function buildPlan2차() {
         cap -= take;
         if (sideTrack[ci_s].remaining <= 0) ci_s++;
       }
-      if (cap > 0 && ci_m >= mainTrack.length && ci_s >= sideTrack.length)
-        sch.push({ name: '전 과정 최종 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
     }
 
     mo.schedule = sch;
