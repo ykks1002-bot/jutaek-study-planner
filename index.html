@@ -148,9 +148,7 @@
     }
     .cal-today-btn:hover { border-color: var(--orange); color: var(--orange); background: var(--orange-light); }
     .cal-selected-label { margin-top: 8px; font-size: .8rem; color: var(--orange); text-align: center; font-weight: 600; }
-    .hours-hint  { margin-top: 12px; font-size: .84rem; padding: 8px 12px; border-radius: 8px; }
-    .hours-hint.ok   { background: #f0fdf4; color: #15803d; }
-    .hours-hint.warn { background: #fffbeb; color: #b45309; }
+    .hours-hint { margin-top: 12px; font-size: .84rem; padding: 10px 14px; border-radius: 8px; background: var(--orange-light); border-left: 3px solid var(--orange); color: var(--gray-700); font-style: italic; }
     .btn-gen {
       width: 100%; padding: 16px;
       background: var(--orange); color: #fff;
@@ -827,19 +825,27 @@ function pickHours(btn, h) {
   updateHoursHint();
 }
 
+const HINT_QUOTES = [
+  { text: '시작이 반이다', author: '아리스토텔레스' },
+  { text: '천 리 길도 한 걸음부터', author: '한국 속담' },
+  { text: '오늘의 노력이 내일의 실력이 됩니다', author: '' },
+  { text: '준비된 자만이 기회를 잡는다', author: '' },
+  { text: '포기하지 않는 자만이 성공을 거머쥔다', author: '' },
+  { text: '인내는 쓰나 그 열매는 달다', author: '루소' },
+  { text: '노력은 결코 배신하지 않는다', author: '' },
+  { text: '지금 이 순간의 노력이 미래의 나를 만든다', author: '' },
+  { text: '작은 목표를 매일 달성하면 큰 꿈이 이루어진다', author: '' },
+  { text: '자신을 믿어라, 당신은 반드시 해낼 수 있다', author: '' },
+];
+
 function updateHoursHint() {
   if (!S.target || !S.hours) return;
   const hint = document.getElementById('hours-hint');
-  const rec  = REC_HOURS[S.target];
+  hint.className = 'hours-hint';
   hint.style.display = '';
-  const tLbl = S.target === '동차' ? '동차' : S.target;
-  if (S.hours < rec) {
-    hint.className = 'hours-hint warn';
-    hint.textContent = `⚠️ ${tLbl} 목표의 권장 학습 시간은 하루 ${rec}시간입니다. 조금 더 시간을 확보해 보세요!`;
-  } else {
-    hint.className = 'hours-hint ok';
-    hint.textContent = `✅ ${tLbl} 목표 권장 시간(${rec}시간) 이상입니다. 훌륭합니다!`;
-  }
+  const idx = ((S.hours || 1) - 1 + (S.target === '2차' ? 3 : S.target === '동차' ? 6 : 0)) % HINT_QUOTES.length;
+  const q = HINT_QUOTES[idx];
+  hint.textContent = `💬 "${q.text}"${q.author ? ` — ${q.author}` : ''}`;
 }
 
 function positionMyPlanBtn() {
