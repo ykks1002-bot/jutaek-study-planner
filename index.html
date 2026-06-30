@@ -1924,6 +1924,7 @@ function toggleMonthRows(ym, rowEl) {
 
 /* ═══════════════ 계획 다운 받기 ═══════════════ */
 const STUDY_QUOTES = [
+  { text: "준비된 자만이 기회를 잡는다", author: "명언" },
   { text: "천 리 길도 한 걸음부터", author: "한국 속담" },
   { text: "시작이 반이다", author: "아리스토텔레스" },
   { text: "오늘 할 일을 내일로 미루지 마라", author: "벤자민 프랭클린" },
@@ -1938,132 +1939,198 @@ const STUDY_QUOTES = [
   { text: "자신을 믿어라. 당신은 할 수 있다", author: "시어도어 루즈벨트" },
 ];
 
-function buildMonthDays(mo, lpd) {
+// PDF 전용 일별 커리큘럼 분배 (target별 전략 분기)
+function buildMonthDaysPDF(mo, lpd, target) {
   const { m, year, sd, lec, schedule } = mo;
   const daysInM = new Date(year, m, 0).getDate();
   const startDay = daysInM - sd + 1;
   const endDay   = startDay + sd - 1;
+  const dayMap   = new Map();
 
-  const queue = [];
-  (schedule || []).forEach(it => {
-    const itemLec = Math.round(it.pct / 100 * lec);
-    if (itemLec > 0) queue.push({
-      name: it.name.replace(/<br>/g, ''),
-      lec: itemLec, cat: it.cat, rev: !!it.rev
+  // 非일요일 단일 큐 분배 (일요일은 빈 항목으로 처리)
+  function queueDistribute(items) {
+    const queue = [];
+    items.forEach(it => {
+      const n = Math.round(it.pct / 100 * lec);
+      if (n > 0) queue.push({ name: it.name.replace(/<br>/g,'').replace(/\[(?:1|2)차\]/g,''), lec: n, cat: it.cat, rev: !!it.rev });
     });
-  });
-
-  const dayMap = new Map();
-  let qi = 0;
-  let rem = queue[0]?.lec || 0;
-
-  for (let d = startDay; d <= endDay; d++) {
-    const dayItems = [];
-    let cap = lpd;
-    while (cap > 0 && qi < queue.length) {
-      const take = Math.min(rem, cap);
-      if (take > 0) {
-        const last = dayItems[dayItems.length - 1];
-        if (last && last.name === queue[qi].name) last.lec += take;
-        else dayItems.push({ name: queue[qi].name, lec: take, cat: queue[qi].cat, rev: queue[qi].rev });
+    let qi = 0, rem = queue[0]?.lec || 0;
+    for (let d = startDay; d <= endDay; d++) {
+      const dow = new Date(year, m-1, d).getDay();
+      if (dow === 0) { dayMap.set(d, []); continue; }
+      const dayItems = []; let cap = lpd;
+      while (cap > 0 && qi < queue.length) {
+        const take = Math.min(rem, cap);
+        if (take > 0) {
+          const last = dayItems[dayItems.length - 1];
+          if (last && last.name === queue[qi].name) last.lec += take;
+          else dayItems.push({ ...queue[qi], lec: take });
+        }
+        rem -= take; cap -= take;
+        if (rem <= 0) { qi++; rem = qi < queue.length ? queue[qi].lec : 0; }
       }
-      rem -= take; cap -= take;
-      if (rem <= 0) { qi++; rem = qi < queue.length ? queue[qi].lec : 0; }
+      dayMap.set(d, dayItems);
     }
-    dayMap.set(d, dayItems);
+  }
+
+  const items = (schedule || []).filter(it => !it.rev);
+
+  if (target === '동차') {
+    // 1차/2차 별도 큐 - 요일별 track 매핑
+    const q1 = [], q2 = [];
+    (schedule || []).forEach(it => {
+      const n = Math.round(it.pct / 100 * lec);
+      if (n <= 0) return;
+      const obj = { name: it.name.replace(/<br>/g,'').replace(/\[(?:1|2)차\]/g,''), lec: n, cat: it.cat };
+      if (it.cat === '1차') q1.push(obj); else q2.push(obj);
+    });
+    let qi1 = 0, rem1 = q1[0]?.lec || 0;
+    let qi2 = 0, rem2 = q2[0]?.lec || 0;
+    for (let d = startDay; d <= endDay; d++) {
+      const dow = new Date(year, m-1, d).getDay();
+      if (dow === 0) { dayMap.set(d, []); continue; }
+      const is1차 = [1,2,3,4].includes(dow);
+      const queue = is1차 ? q1 : q2;
+      let qi = is1차 ? qi1 : qi2;
+      let rem = is1차 ? rem1 : rem2;
+      const dayItems = []; let cap = lpd;
+      while (cap > 0 && qi < queue.length) {
+        const take = Math.min(rem, cap);
+        if (take > 0) {
+          const last = dayItems[dayItems.length - 1];
+          if (last && last.name === queue[qi].name) last.lec += take;
+          else dayItems.push({ ...queue[qi], lec: take });
+        }
+        rem -= take; cap -= take;
+        if (rem <= 0) { qi++; rem = qi < queue.length ? queue[qi].lec : 0; }
+      }
+      dayMap.set(d, dayItems);
+      if (is1차) { qi1 = qi; rem1 = rem; } else { qi2 = qi; rem2 = rem; }
+    }
+  } else if (items.length > 1) {
+    // 2차 병행월: 매일 비례 분배
+    const totalPct = items.reduce((s, it) => s + it.pct, 0) || 100;
+    for (let d = startDay; d <= endDay; d++) {
+      const dow = new Date(year, m-1, d).getDay();
+      if (dow === 0) { dayMap.set(d, []); continue; }
+      dayMap.set(d, items.map(it => ({
+        name: it.name.replace(/<br>/g,''), lec: Math.max(1, Math.round(lpd * it.pct / totalPct)), cat: it.cat
+      })).filter(x => x.lec > 0));
+    }
+  } else {
+    queueDistribute(schedule || []);
   }
   return { dayMap, startDay, endDay, daysInM };
 }
 
+// 월별 계획 페이지 HTML — 주별 3행 테이블 (날짜/과목/강의) 형식
 function buildMonthPageHTML(mo, lpd, quote, planInfo) {
-  const { m, year, sd, lec } = mo;
-  const { tLbl, hLbl, examDate1, examDate2 } = planInfo;
+  const { m, year, sd } = mo;
+  const { examDate1, examDate2, target, examYear } = planInfo;
   const daysInM = new Date(year, m, 0).getDate();
-  const { dayMap, startDay, endDay } = buildMonthDays(mo, lpd);
+  const { dayMap, startDay, endDay } = buildMonthDaysPDF(mo, lpd, target);
 
-  const MONTH_KR = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const DAY_KR   = ['월','화','수','목','금','토','일'];
+  // 제N회 시험 번호
+  const MONTH_KR  = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  const examN     = examYear === 2026 ? 29 : 30;
+  const tgtLabel  = target === '1차' ? '1차목표' : target === '2차' ? '2차목표' : '동차목표';
+  const title     = `${year}년 제${examN}회 ${tgtLabel} ${MONTH_KR[m-1]} 학습계획`;
+
+  // 요일별 과목 배치 (0=일,1=월,...,6=토)
+  const SUBJ_TMPL = {
+    '1차': [null, '회계원리', '시설개론', '민법', '회계원리', '시설개론', '민법'],
+    '2차': [null, '관계법규', '관리실무', '관계법규', '관리실무', '관계법규', '관리실무'],
+    '동차': [null, '회계원리', '시설개론', '민법', '회계원리', '관계법규', '관리실무'],
+  };
+  const subjTpl = SUBJ_TMPL[target] || SUBJ_TMPL['동차'];
 
   const isExam1Mo = examDate1 && examDate1.getFullYear() === year && examDate1.getMonth()+1 === m;
   const isExam2Mo = examDate2 && examDate2.getFullYear() === year && examDate2.getMonth()+1 === m;
   const examDay   = isExam1Mo ? examDate1.getDate() : isExam2Mo ? examDate2.getDate() : null;
-  const headerGrad = isExam2Mo
-    ? 'linear-gradient(135deg,#7f1d1d,#dc2626)'
-    : 'linear-gradient(135deg,#7c2d12,#ea580c)';
 
-  function itemStyle(cat) {
-    if (cat === '2차') return { bg: '#f5f3ff', border: '#7c3aed', text: '#5b21b6' };
-    return { bg: '#fff7ed', border: '#ea580c', text: '#9a3412' };
-  }
-
-  const firstDow  = (new Date(year, m-1, 1).getDay() + 6) % 7;
-  const numWeeks  = Math.ceil((firstDow + daysInM) / 7);
-  const CELL_H    = Math.floor(560 / numWeeks);
-
-  let calRows = '';
-  let dayNum = 1 - firstDow;
-  while (dayNum <= daysInM) {
-    calRows += '<tr>';
-    for (let d = 0; d < 7; d++) {
-      const dn = dayNum + d;
-      if (dn < 1 || dn > daysInM) {
-        calRows += '<td style="background:#f8fafc;border:1px solid #e5e7eb;"></td>';
-      } else {
-        const isStudyDay  = dn >= startDay && dn <= endDay;
-        const isExam      = examDay !== null && dn === examDay;
-        const isPostExam  = examDay !== null && dn > examDay;
-        const dayItems    = dayMap.get(dn) || [];
-        const isSat = d === 5, isSun = d === 6;
-        const bg          = isExam ? '#fef2f2' : isPostExam ? '#f9fafb' : isStudyDay ? '#fff' : '#fafafa';
-        const cellBorder  = isExam ? '1.5px solid #ef4444' : '1px solid #e5e7eb';
-        const dnColor     = isSun ? '#ef4444' : isSat ? '#ea580c' : '#374151';
-
-        let itemsHTML = '';
-        if (isExam) {
-          itemsHTML = '<div style="margin-top:4px;background:#fee2e2;border:1px solid #fca5a5;border-radius:5px;padding:3px 5px;text-align:center;font-size:9.5px;font-weight:700;color:#dc2626;">🎯 시험일</div>';
-        } else if (!isPostExam && isStudyDay && dayItems.length > 0) {
-          dayItems.forEach(it => {
-            const cs   = itemStyle(it.cat);
-            const nm   = it.name.length > 11 ? it.name.slice(0,10)+'…' : it.name;
-            const chip = it.rev ? '#f0fdf4' : cs.bg;
-            const brd  = it.rev ? '#86efac' : cs.border;
-            const txt  = it.rev ? '#15803d' : cs.text;
-            itemsHTML += `<div style="margin-top:3px;background:${chip};border:1px solid ${brd};border-radius:5px;padding:2px 5px;">
-              <div style="font-size:9px;font-weight:700;color:${txt};line-height:1.3;">${nm}</div>
-              <div style="font-size:8px;color:#64748b;">${it.lec}강</div>
-            </div>`;
-          });
-        }
-
-        calRows += `<td style="background:${bg};border:${cellBorder};padding:4px 4px 3px;vertical-align:top;height:${CELL_H}px;">
-          <div style="font-size:11px;font-weight:700;color:${dnColor};">${dn}</div>
-          ${itemsHTML}
-        </td>`;
-      }
+  function getCurrLabel(dn, dow) {
+    const items = dayMap.get(dn) || [];
+    if (!items.length) return '';
+    if (target === '동차') {
+      const is1차 = [1,2,3,4].includes(dow);
+      const fil = items.filter(it => is1차 ? it.cat === '1차' : it.cat === '2차');
+      return (fil.length > 0 ? fil : items).map(it => it.name).join(' / ');
     }
-    calRows += '</tr>';
-    dayNum += 7;
+    return items.map(it => it.name).join(' / ');
   }
 
-  const examInfo = isExam2Mo ? ` · 시험일 ${examDay}일` : isExam1Mo ? ` · 1차 시험 ${examDay}일` : '';
-  return `<div style="width:1056px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Apple SD Gothic Neo','Noto Sans KR',sans-serif;margin:0;padding:0;">
-    <div style="background:${headerGrad};color:#fff;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;">
-      <div>
-        <div style="font-size:22px;font-weight:900;letter-spacing:-.5px;">${year}년 ${MONTH_KR[m-1]}</div>
-        <div style="font-size:12px;opacity:.85;margin-top:3px;">${tLbl} 목표 · 하루 ${hLbl} · ${sd}일 학습 · 총 ${sd*lpd}강${examInfo}</div>
-      </div>
-      <div style="text-align:right;max-width:400px;">
-        <div style="font-size:10px;opacity:.7;margin-bottom:4px;letter-spacing:.05em;">📖 이달의 명언</div>
-        <div style="font-size:14px;font-weight:700;font-style:italic;line-height:1.4;">"${quote.text}"</div>
-        ${quote.author ? `<div style="font-size:11px;opacity:.75;margin-top:3px;">— ${quote.author}</div>` : ''}
-      </div>
+  // 주 단위 배열 구성 (0=일 기준)
+  const firstDow = new Date(year, m-1, 1).getDay();
+  const DAY_HDR  = ['일','월','화','수','목','금','토'];
+  const HDR_BG   = '#1e3a8a';
+  const GBN_BG   = '#e8f0fe';
+  const GBN_TXT  = '#1e3a8a';
+
+  const weeks = [];
+  let ws = 1 - firstDow;
+  while (ws <= daysInM) {
+    const w = [];
+    for (let d = 0; d < 7; d++) { const dn = ws+d; w.push(dn>=1&&dn<=daysInM?dn:null); }
+    if (w.some(d => d!==null)) weeks.push(w);
+    ws += 7;
+  }
+
+  // TD 공통 스타일
+  const tdBase = 'text-align:center;border:1px solid #e2e8f0;';
+  const thBase = `background:${HDR_BG};text-align:center;border:1px solid ${HDR_BG};font-size:12px;font-weight:700;`;
+  const gbnTd  = `background:${GBN_BG};color:${GBN_TXT};text-align:center;border:1px solid #c7d4f0;font-size:11.5px;font-weight:700;padding:8px 10px;white-space:nowrap;`;
+
+  let tbody = '';
+  weeks.forEach(week => {
+    // 날짜 행
+    let r1 = `<tr><td style="${gbnTd}">날짜</td>`;
+    week.forEach((dn, di) => {
+      const red = di===0||di===6;
+      r1 += `<td style="${tdBase}padding:8px 4px;font-size:11px;font-weight:${dn?'600':'400'};color:${red?'#ef4444':'#374151'};">${dn?`${m}월 ${dn}일`:''}</td>`;
+    });
+    r1 += '</tr>';
+
+    // 과목 행
+    let r2 = `<tr><td style="${gbnTd}">과목</td>`;
+    week.forEach((dn, di) => {
+      const isSun   = di===0;
+      const isStudy = dn!==null && dn>=startDay && dn<=endDay;
+      const isExam  = dn!==null && dn===examDay;
+      let txt = '';
+      if (isExam)           txt = '<span style="color:#dc2626;font-weight:700;">시험일</span>';
+      else if (!isSun && isStudy) txt = subjTpl[di] || '';
+      r2 += `<td style="${tdBase}padding:8px 4px;font-size:11px;color:#374151;">${txt}</td>`;
+    });
+    r2 += '</tr>';
+
+    // 강의 행
+    let r3 = `<tr><td style="${gbnTd}">강의</td>`;
+    week.forEach((dn, di) => {
+      const isSun   = di===0;
+      const isStudy = dn!==null && dn>=startDay && dn<=endDay;
+      const isExam  = dn!==null && dn===examDay;
+      let txt = '';
+      if (!isExam && isStudy) txt = isSun ? '복습/휴식' : getCurrLabel(dn, di);
+      r3 += `<td style="${tdBase}padding:8px 4px;font-size:10.5px;color:#374151;">${txt}</td>`;
+    });
+    r3 += '</tr>';
+
+    tbody += r1 + r2 + r3;
+  });
+
+  const thead = `<tr>
+    <th style="${thBase}color:#fff;padding:9px 12px;width:54px;">구분</th>
+    ${DAY_HDR.map((d,i) => `<th style="${thBase}color:${(i===0||i===6)?'#fca5a5':'#fff'};padding:9px 6px;">${d}</th>`).join('')}
+  </tr>`;
+
+  return `<div style="width:1050px;background:#fff;padding:28px 36px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Apple SD Gothic Neo','Noto Sans KR',sans-serif;">
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:19px;font-weight:800;color:#1e293b;margin-bottom:8px;letter-spacing:-.3px;">${title}</div>
+      <div style="font-size:13px;color:#64748b;font-style:italic;">&quot;${quote.text}&quot;${quote.author ? ` &mdash; ${quote.author}` : ''}</div>
     </div>
     <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
-      <thead><tr>${DAY_KR.map((d,i) => {
-        const c = i===6?'#ef4444':i===5?'#ea580c':'#374151';
-        return `<th style="padding:6px 4px;text-align:center;font-size:12px;font-weight:700;color:${c};background:#f8fafc;border:1px solid #e5e7eb;">${d}</th>`;
-      }).join('')}</tr></thead>
-      <tbody>${calRows}</tbody>
+      <thead>${thead}</thead>
+      <tbody>${tbody}</tbody>
     </table>
   </div>`;
 }
@@ -2082,14 +2149,14 @@ async function downloadPDF(btn) {
     const hLbl = S.hours >= 7 ? '6시간+' : S.hours + '시간';
     const dStr = S.startDate ? S.startDate.toLocaleDateString('ko-KR', {month:'numeric',day:'numeric'}) : '';
     const examDate1 = S.target !== '2차' ? EXAM_1[S.year] : null;
-    const examDate2 = S.target !== '1차' ? EXAM_2[S.year] : null;
-    const planInfo  = { tLbl, hLbl, examDate1, examDate2 };
+    const examDate2  = S.target !== '1차' ? EXAM_2[S.year] : null;
+    const planInfo   = { tLbl, hLbl, examDate1, examDate2, target: S.target, examYear: plan.examYear };
 
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const A4_W = 210, A4_H = 297;
 
-    // ── Page 1: Portrait — 로드맵 + 나의 학습 현황 ──────────────
+    // ── Page 1: Portrait — 로드맵 + 나의 학습 현황 + 실제 학습 순서 ─
     btn.innerHTML = `⏳ 1/${plan.months.length + 1}`;
     const wrap = document.createElement('div');
     wrap.style.cssText = 'position:absolute;left:-9999px;top:0;width:820px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;';
@@ -2099,24 +2166,51 @@ async function downloadPDF(btn) {
       <div style="font-size:12px;opacity:.85;">${tLbl} 목표 &nbsp;·&nbsp; ${dStr} 시작 &nbsp;·&nbsp; 하루 ${hLbl}</div>
     </div>`;
 
+    // 간트 로드맵
     const ganttEl = document.getElementById('gantt-chart');
     if (ganttEl && ganttEl.innerHTML.trim()) {
       const ganttSec = document.createElement('div');
-      ganttSec.style.cssText = 'padding:16px 28px 8px;';
+      ganttSec.style.cssText = 'padding:14px 28px 8px;';
       ganttSec.innerHTML = '<div style="font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:12px;">📚 추천 커리큘럼 학습 로드맵</div>';
       ganttSec.appendChild(ganttEl.cloneNode(true));
       wrap.appendChild(ganttSec);
     }
 
+    // 나의 학습 현황
     const statEl = document.getElementById('stat-grid');
     if (statEl) {
       const statSec = document.createElement('div');
-      statSec.style.cssText = 'padding:8px 28px 16px;';
+      statSec.style.cssText = 'padding:8px 28px 12px;';
       statSec.innerHTML = '<div style="font-size:13px;font-weight:700;color:#374151;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:12px;">📊 나의 학습 현황</div>';
       const sc = statEl.cloneNode(true);
       sc.style.cssText = 'display:grid;grid-template-columns:repeat(6,1fr);gap:10px;';
       statSec.appendChild(sc);
       wrap.appendChild(statSec);
+    }
+
+    // 실제 학습 순서
+    const included = plan.result.filter(c => c.status !== 'skipped');
+    if (included.length > 0) {
+      const isDc = S.target === '동차';
+      let pathInner = '';
+      included.forEach((c, i) => {
+        const nm = isDc ? c.name.replace(/\[(?:1|2)차\]/g,'') : c.name.replace(/<br>/g,' ');
+        const tagBg = (c.cat === '2차') ? '#ede9fe' : '#fff7ed';
+        const tagBorder = (c.cat === '2차') ? '#7c3aed' : '#ea580c';
+        const tagTxt = (c.cat === '2차') ? '#5b21b6' : '#9a3412';
+        pathInner += `<div style="background:${tagBg};border:1.5px solid ${tagBorder};border-radius:8px;padding:8px 10px;text-align:center;flex:1;min-width:70px;">
+          <div style="font-size:10.5px;font-weight:700;color:${tagTxt};line-height:1.35;">${nm}</div>
+          <div style="font-size:9.5px;color:#64748b;margin-top:2px;">${c.effective}강</div>
+        </div>`;
+        if (i < included.length - 1) pathInner += '<div style="color:#22c55e;font-size:14px;flex-shrink:0;align-self:center;">→</div>';
+      });
+      const pathSec = document.createElement('div');
+      pathSec.style.cssText = 'padding:0 28px 14px;';
+      pathSec.innerHTML = `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 14px;">
+        <div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:10px;">📖 실제 학습 순서 (커리큘럼 순서에 따라 순차 진행)</div>
+        <div style="display:flex;flex-wrap:nowrap;gap:5px;align-items:stretch;">${pathInner}</div>
+      </div>`;
+      wrap.appendChild(pathSec);
     }
 
     wrap.insertAdjacentHTML('beforeend',
