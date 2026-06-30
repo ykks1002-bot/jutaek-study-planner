@@ -281,7 +281,8 @@
     .gantt-month-h { text-align: center; font-size: .72rem; font-weight: 700; color: var(--gray-500); padding: 4px 0; border-left: 1px solid var(--gray-200); }
     .gantt-body { display: flex; }
     .gantt-labels { width: 110px; flex-shrink: 0; }
-    .gantt-label-row { display: flex; align-items: center; font-size: .68rem; color: var(--gray-500); font-weight: 600; padding-right: 8px; line-height: 1.25; }
+    .gantt-label-row { display: flex; align-items: center; font-size: .68rem; color: var(--gray-500); font-weight: 600; padding-right: 8px; line-height: 1.3; }
+    .gantt-label-row span { display: block; line-height: 1.3; }
     .gantt-timeline-area { flex: 1; position: relative; }
     .gantt-gridlines { position: absolute; inset: 0; display: grid; pointer-events: none; }
     .gantt-gridline { border-left: 1px solid var(--gray-200); }
@@ -815,13 +816,12 @@ function buildDongchaPlan() {
     cap2 += mo.lec2;
   });
 
-  // 우선순위 기반 수강 가능 여부 결정 (priority 높은 것부터 full 할당)
+  // 우선순위 기반 수강 가능 여부 결정 (100% 수강 불가 시 skipped 처리)
   function allocate(currs, cap) {
     const sorted = currs.map(c => ({ ...c, needed: c.total })).sort((a, b) => a.pri - b.pri);
     let rem = cap;
     sorted.forEach(c => {
       if (rem >= c.needed)  { c.status = 'full';    c.effective = c.needed; rem -= c.needed; }
-      else if (rem > 0)     { c.status = 'partial'; c.effective = rem; c.pct = Math.round(rem/c.needed*100); rem = 0; }
       else                  { c.status = 'skipped'; c.effective = 0; }
     });
     return sorted;
@@ -948,7 +948,6 @@ function buildPlan2차() {
   let rem = capacity;
   sorted.forEach(c => {
     if (rem >= c.needed) { c.status = 'full';    c.effective = c.needed; rem -= c.needed; }
-    else if (rem > 0)    { c.status = 'partial'; c.effective = rem; c.pct = Math.round(rem/c.needed*100); rem = 0; }
     else                 { c.status = 'skipped'; c.effective = 0; }
   });
   const result    = CURRS_2.map(orig => sorted.find(c => c.seq === orig.seq));
@@ -1057,7 +1056,6 @@ function buildPlan() {
   let rem = capacity;
   sorted.forEach(c => {
     if (rem >= c.needed) { c.status = 'full'; c.effective = c.needed; rem -= c.needed; }
-    else if (rem > 0)    { c.status = 'partial'; c.effective = rem; c.pct = Math.round(rem/c.needed*100); rem = 0; }
     else                 { c.status = 'skipped'; c.effective = 0; }
   });
 
@@ -1183,13 +1181,18 @@ function renderGantt(p) {
   });
   bars.sort((a, b) => a.leftPct - b.leftPct);
 
+  // 5자 이상 한글 뒤 '('가 오면 줄바꿈 삽입 (예: 단원별문제풀이(객관식) → 두 줄)
+  function ganttLabel(name) {
+    return name.replace(/((?:[가-힣]){5,})\(/, '$1<br>(');
+  }
+
   const totalH = bars.length * ROW_H;
   let html = `<div class="gantt-wrap"><div class="gantt-inner">`;
   html += `<div class="gantt-header"><div class="gantt-label-col-h"></div><div class="gantt-month-headers" style="grid-template-columns:repeat(${numM},1fr);">`;
   months.forEach(mo => { html += `<div class="gantt-month-h">${mo.m}월${mo.year !== (S.year || 2026) ? `<span style="font-size:.6rem;opacity:.6;">'${String(mo.year).slice(2)}</span>` : ''}</div>`; });
   html += `</div></div><div class="gantt-body">`;
   html += `<div class="gantt-labels">`;
-  bars.forEach(b => { html += `<div class="gantt-label-row" style="height:${ROW_H}px;">${b.name}</div>`; });
+  bars.forEach(b => { html += `<div class="gantt-label-row" style="height:${ROW_H}px;"><span>${ganttLabel(b.name)}</span></div>`; });
   html += `</div>`;
   html += `<div class="gantt-timeline-area" style="height:${totalH}px;">`;
   html += `<div class="gantt-gridlines" style="grid-template-columns:repeat(${numM},1fr);">`;
