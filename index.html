@@ -1290,33 +1290,51 @@ function renderGantt(p) {
 
   const numM = months.length;
   const ROW_H = 46;
-  const barsMap = new Map();
-  let colorIdx = 0;
-
-  months.forEach((mo, mi) => {
-    let cumFrac = 0;
-    (mo.schedule || []).forEach(item => {
-      const f = item.pct / 100;
-      if (!item.rev) {
-        if (!barsMap.has(item.name)) {
-          barsMap.set(item.name, { mi, startFrac: cumFrac, endMi: mi, endFrac: cumFrac + f, colorIdx: colorIdx++ });
-        } else {
-          const b = barsMap.get(item.name);
-          b.endMi = mi; b.endFrac = cumFrac + f;
-        }
+  // Build bars from openM windows: bar starts at openM, spans full window if curriculum fits
+  function openMToDate(openM) {
+    if (!openM || openM === 0) return new Date(examYear - 1, 0, 1);
+    if (openM < 0) return new Date(examYear - 1, -openM - 1, 1);
+    return new Date(examYear, openM - 1, 1);
+  }
+  function dateToFrac(d) {
+    const yr = d.getFullYear(), mn = d.getMonth() + 1, dy = d.getDate();
+    for (let i = 0; i < months.length; i++) {
+      if (months[i].year === yr && months[i].m === mn) {
+        const dim = new Date(yr, mn, 0).getDate();
+        return (i + (dy - 1) / dim) / numM;
       }
-      cumFrac += f;
-    });
-  });
+    }
+    return d < new Date(months[0].year, months[0].m - 1, 1) ? 0 : 1;
+  }
+
+  const active = result.filter(c => c.status !== 'skipped').sort((a, b) => a.seq - b.seq);
+  const examDate = getExamDate();
+  const firstMonthDate = new Date(months[0].year, months[0].m - 1, 1);
 
   const bars = [];
-  barsMap.forEach(({ mi, startFrac, endMi, endFrac, colorIdx: ci }, name) => {
-    bars.push({
-      name,
-      leftPct:  (mi + startFrac) / numM * 100,
-      widthPct: (endMi + endFrac - mi - startFrac) / numM * 100,
-      color:    GANTT_COLORS[ci % GANTT_COLORS.length],
-    });
+  active.forEach((c, idx) => {
+    const cOpenM = c.openM || 0;
+    const openDate = openMToDate(cOpenM);
+
+    // Window ends at first subsequent curriculum with a DIFFERENT openM (or day after exam)
+    const nextDiff = active.slice(idx + 1).find(nc => (nc.openM || 0) !== cOpenM);
+    const windowEndDate = nextDiff
+      ? openMToDate(nextDiff.openM || 0)
+      : new Date(examDate.getTime() + 86400000);
+
+    const windowDays = Math.max(1, Math.round((windowEndDate - openDate) / 86400000));
+    const windowCap  = windowDays * lpd;
+    const barEndDate = windowCap >= c.effective
+      ? windowEndDate
+      : new Date(openDate.getTime() + Math.ceil(c.effective / lpd) * 86400000);
+
+    const startDate = openDate < firstMonthDate ? firstMonthDate : openDate;
+    const leftFrac  = Math.max(0, dateToFrac(startDate));
+    const rightFrac = Math.min(1, dateToFrac(barEndDate));
+
+    if (rightFrac > leftFrac + 0.005) {
+      bars.push({ name: c.name.replace(/<br>/g, ''), leftPct: leftFrac * 100, widthPct: (rightFrac - leftFrac) * 100, color: GANTT_COLORS[idx % GANTT_COLORS.length] });
+    }
   });
   bars.sort((a, b) => a.leftPct - b.leftPct);
 
