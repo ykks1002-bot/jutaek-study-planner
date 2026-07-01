@@ -1155,7 +1155,7 @@ function buildPlan2차() {
     const daysInM = new Date(curY, curM, 0).getDate();
     const startDay = (curM === startDate.getMonth()+1 && curY === startDate.getFullYear()) ? startDate.getDate() : 1;
     const sd = daysInM - startDay + 1;
-    months.push({ m: curM, year: curY, sd, lec: sd * lpd, schedule: [] });
+    months.push({ m: curM, year: curY, sd, ld: sd, lec: sd * lpd, schedule: [] });
     curM++; if (curM > 12) { curM = 1; curY++; }
   }
 
@@ -1397,7 +1397,7 @@ const GANTT_COLORS = [
 
 function renderGantt(p) {
   if (S.target === '동차') { document.getElementById('gantt-chart').innerHTML = ''; return; }
-  const { result, months } = p;
+  const { result, months, lpd, examYear } = p;
   if (!months.length) { document.getElementById('gantt-chart').innerHTML = ''; return; }
 
   const numM = months.length;
