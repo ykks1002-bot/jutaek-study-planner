@@ -915,7 +915,7 @@ function buildDongchaPlan() {
     const startDay = (curM === startDate.getMonth()+1 && curY === startDate.getFullYear()) ? startDate.getDate() : 1;
     const endDay   = (curY === examYear && curM === 9) ? 15 : daysInM;
     const sd = Math.max(0, endDay - startDay + 1);
-    months.push({ m: curM, year: curY, sd, ld: sd, lec: sd * lpd, lec1: 0, lec2: 0, gapLec: 0 });
+    months.push({ m: curM, year: curY, sd, ld: sd, lec: sd * lpd, lec1: 0, lec2: 0, gapLec: 0, startDay, endDay, isPhaseC: (curY === examYear && curM >= 7) });
     curM++; if (curM > 12) { curM = 1; curY++; }
   }
 
@@ -2126,7 +2126,7 @@ function buildMonthDaysPDF(mo, lpd, target) {
     let qi2 = 0, rem2 = q2[0]?.lec || 0;
     for (let d = startDay; d <= endDay; d++) {
       const dow = new Date(year, m-1, d).getDay();
-      if (dow === 0) { dayMap.set(d, []); continue; }
+      if (dow === 0 && !mo.isPhaseC) { dayMap.set(d, []); continue; }
       const is1차 = [1,2,3,4].includes(dow);
       const queue = is1차 ? q1 : q2;
       let qi = is1차 ? qi1 : qi2;
@@ -2178,7 +2178,7 @@ function buildMonthPageHTML(mo, lpd, quote, planInfo) {
   const SUBJ_TMPL = {
     '1차': [null, '회계원리', '시설개론', '민법', '회계원리', '시설개론', '민법'],
     '2차': ['관계법규', '관계법규', '관리실무', '관계법규', '관리실무', '관계법규', '관리실무'],
-    '동차': [null, '회계원리', '시설개론', '민법', '회계원리', '관계법규', '관리실무'],
+    '동차': ['관계법규', '회계원리', '시설개론', '민법', '회계원리', '관계법규', '관리실무'],
   };
   const subjTpl = SUBJ_TMPL[target] || SUBJ_TMPL['동차'];
 
@@ -2236,7 +2236,7 @@ function buildMonthPageHTML(mo, lpd, quote, planInfo) {
       const isExam  = dn!==null && dn===examDay;
       let txt = '';
       if (isExam)           txt = '<span style="color:#dc2626;font-weight:700;">시험일</span>';
-      else if ((!isSun || target === '2차') && isStudy) txt = subjTpl[di] || '';
+      else if ((!isSun || target === '2차' || (target === '동차' && mo.isPhaseC)) && isStudy) txt = subjTpl[di] || '';
       r2 += `<td style="${tdBase}padding:8px 4px;font-size:11px;color:#374151;">${txt}</td>`;
     });
     r2 += '</tr>';
@@ -2248,7 +2248,7 @@ function buildMonthPageHTML(mo, lpd, quote, planInfo) {
       const isStudy = dn!==null && dn>=startDay && dn<=endDay;
       const isExam  = dn!==null && dn===examDay;
       let txt = '';
-      if (!isExam && isStudy) txt = (isSun && target !== '2차') ? '복습/휴식' : getCurrLabel(dn, di);
+      if (!isExam && isStudy) txt = (isSun && target !== '2차' && !(target === '동차' && mo.isPhaseC)) ? '복습/휴식' : getCurrLabel(dn, di);
       r3 += `<td style="${tdBase}padding:8px 4px;font-size:10.5px;color:#374151;">${txt}</td>`;
     });
     r3 += '</tr>';
