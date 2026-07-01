@@ -853,6 +853,12 @@ window.addEventListener('scroll', positionMyPlanBtn);
 window.addEventListener('resize', positionMyPlanBtn);
 
 /* ═══════════════ AVAILABILITY CHECK ═══════════════ */
+// openM → 절대 월 키 (음수 = 전년도 월, 양수 = 시험연도 월)
+function openMKey(openM, examYear) {
+  const m = openM || 0;
+  return m < 0 ? (examYear - 1) * 12 + (-m) : examYear * 12 + m;
+}
+
 function isOpen(openM, moYear, moMonth, examYear) {
   if (openM === 0) return true;
   if (openM < 0) {
@@ -1163,13 +1169,21 @@ function buildPlan2차() {
   // ── 3구간 배분 ────────────────────────────────────────────────
   const sorted = CURRS_2.map(c => ({ ...c, needed: c.total, status: 'skipped', effective: 0 }));
 
-  // 구간 A — 7월 이전 항목 (기초이론·이론완성): before_july_lec 범위, openM 순
-  sorted.filter(c => [1,2,3].includes(c.seq))
-    .sort((a, b) => toKey(a.openM||0) - toKey(b.openM||0))
+  // 구간 A — openM < 7인 항목을 before_july_lec 범위에서 개강순 배분
+  sorted
+    .filter(c => { const om = c.openM || 0; return om < 0 || (om > 0 && om < 7); })
+    .sort((a, b) => toKey(a.openM||0) - toKey(b.openM||0) || a.pri - b.pri)
     .reduce((rem, c) => {
       if (rem >= c.needed) { c.status = 'full'; c.effective = c.needed; return rem - c.needed; }
       return rem;
     }, before_july_lec);
+
+  // 단원별 항목 레퍼런스
+  const c4 = sorted.find(c => c.seq === 4);
+  const c5 = sorted.find(c => c.seq === 5);
+
+  // 단원별이 7월 이전에 모두 완료된 경우 → 7~8월은 핵심이론만
+  const bothPreCompleted = c4.status === 'full' && c5.status === 'full';
 
   // 구간 B — 핵심이론·마무리100선·동형모의고사: 항상 배분
   [6, 7, 8].forEach(seq => {
@@ -1177,75 +1191,42 @@ function buildPlan2차() {
     c.status = 'full'; c.effective = c.needed;
   });
 
-  // 구간 C — 단원별 문제풀이: 7~8월 내 완료 가능 여부 기준
-  const c4 = sorted.find(c => c.seq === 4);
-  const c5 = sorted.find(c => c.seq === 5);
-  c4.status = canObject  ? 'full' : 'skipped';  c4.effective = canObject  ? c4.needed : 0;
-  c5.status = canSubject ? 'full' : 'skipped';  c5.effective = canSubject ? c5.needed : 0;
+  // 구간 C — 단원별: 사전 완료되지 않은 경우에만 7~8월 완료 가능 여부 기준
+  if (!bothPreCompleted) {
+    c4.status = canObject  ? 'full' : 'skipped';  c4.effective = canObject  ? c4.needed : 0;
+    c5.status = canSubject ? 'full' : 'skipped';  c5.effective = canSubject ? c5.needed : 0;
+  }
 
   const result    = CURRS_2.map(orig => sorted.find(c => c.seq === orig.seq));
   const fullCount = result.filter(c => c.status === 'full').length;
 
-  // contentLec = 월 원시 용량 그대로 (9월 여유는 최종복습으로 표시)
   months.forEach(mo => { mo.contentLec = mo.lec; });
 
-  // 주력 트랙: 이론완성 계열 + 핵심이론 + 마무리100선 + 동형모의고사
-  const mainTrack = result
-    .filter(c => c.status !== 'skipped' && [1,2,3,6,7,8].includes(c.seq))
+  // 순차 트랙: 핵심이론 우선 → 단원별(객관식) → 단원별(주관식) 순서대로
+  // (pri 순 정렬로 핵심이론 pri:1 → 단원별객관식 pri:4 → 단원별주관식 pri:5 자동 보장)
+  const track = result
+    .filter(c => c.status !== 'skipped')
     .sort((a, b) => toKey(a.openM||0) - toKey(b.openM||0) || a.pri - b.pri)
-    .map(c => ({ ...c, remaining: c.effective }));
+    .map(c => ({ ...c, name: c.name.replace(/<br>/g,''), remaining: c.effective }));
 
-  // 병행 트랙: 단원별 문제풀이 (7~8월 전용)
-  const sideTrack = result
-    .filter(c => c.status !== 'skipped' && [4,5].includes(c.seq))
-    .sort((a, b) => toKey(a.openM||0) - toKey(b.openM||0) || a.pri - b.pri)
-    .map(c => ({ ...c, remaining: c.effective }));
-
-  // 병행 모드: side track 존재 시 concurrent (july_aug_lec로 이미 검증됨)
-  const sideTotalEff  = sideTrack.reduce((s, c) => s + c.effective, 0);
-  const useConcurrent = sideTotalEff > 0 && mainTrack.some(c => c.seq === 6);
-  const MAIN_RATIO    = useConcurrent ? 144 / (144 + sideTotalEff) : 1;
-
-  let ci_m = 0, ci_s = 0;
+  let ci = 0;
   months.forEach(mo => {
-    const isConcurrent = useConcurrent && (mo.m === 7 || mo.m === 8) && mo.year === examYear;
-    const mainCap = isConcurrent ? Math.round(mo.contentLec * MAIN_RATIO) : mo.contentLec;
-    const sideCap = isConcurrent ? mo.contentLec - mainCap : 0;
+    while (ci < track.length && track[ci].remaining <= 0) ci++;
+    let cap = mo.contentLec;
     const sch = [];
-
-    // 주력 트랙 스케줄링
-    {
-      let cap = mainCap;
-      while (cap > 0 && ci_m < mainTrack.length) {
-        if (!isOpen(mainTrack[ci_m].openM, mo.year, mo.m, examYear)) {
-          sch.push({ name: '부족한 과목 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
-          break;
-        }
-        const take = Math.min(mainTrack[ci_m].remaining, cap);
-        const pct  = Math.round(take / mo.contentLec * 100);
-        if (pct > 0) sch.push({ name: mainTrack[ci_m].name.replace(/<br>/g,''), pct });
-        mainTrack[ci_m].remaining -= take;
-        cap -= take;
-        if (mainTrack[ci_m].remaining <= 0) ci_m++;
+    while (cap > 0 && ci < track.length) {
+      if (!isOpen(track[ci].openM, mo.year, mo.m, examYear)) {
+        sch.push({ name: '부족한 과목 복습', pct: Math.round(cap/mo.contentLec*100), rev: true }); break;
       }
-      if (cap > 0 && ci_m >= mainTrack.length)
-        sch.push({ name: '전 과정 최종 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
+      const take = Math.min(track[ci].remaining, cap);
+      const pct  = Math.round(take / mo.contentLec * 100);
+      if (pct > 0) sch.push({ name: track[ci].name, pct });
+      track[ci].remaining -= take;
+      cap -= take;
+      if (track[ci].remaining <= 0) ci++;
     }
-
-    // 병행 트랙: 7~8월 한정
-    if (isConcurrent && sideCap > 0) {
-      let cap = sideCap;
-      while (cap > 0 && ci_s < sideTrack.length) {
-        if (!isOpen(sideTrack[ci_s].openM, mo.year, mo.m, examYear)) break;
-        const take = Math.min(sideTrack[ci_s].remaining, cap);
-        const pct  = Math.round(take / mo.contentLec * 100);
-        if (pct > 0) sch.push({ name: sideTrack[ci_s].name.replace(/<br>/g,''), pct });
-        sideTrack[ci_s].remaining -= take;
-        cap -= take;
-        if (sideTrack[ci_s].remaining <= 0) ci_s++;
-      }
-    }
-
+    if (cap > 0 && ci >= track.length)
+      sch.push({ name: '전 과정 최종 복습', pct: Math.round(cap/mo.contentLec*100), rev: true });
     mo.schedule = sch;
   });
 
@@ -1404,28 +1385,42 @@ function renderGantt(p) {
     return d < new Date(months[0].year, months[0].m - 1, 1) ? 0 : 1;
   }
 
-  const active = result.filter(c => c.status !== 'skipped').sort((a, b) => a.seq - b.seq);
+  // 2차는 순차 학습순 (openMKey→pri), 그 외 seq 순
+  const active = result.filter(c => c.status !== 'skipped').sort((a, b) =>
+    S.target === '2차'
+      ? openMKey(a.openM||0, examYear) - openMKey(b.openM||0, examYear) || a.pri - b.pri
+      : a.seq - b.seq
+  );
   const examDate = getExamDate();
   const firstMonthDate = new Date(months[0].year, months[0].m - 1, 1);
 
   const bars = [];
+  let cursor = null; // 2차 순차: 이전 커리큘럼 종료일 추적
   active.forEach((c, idx) => {
     const cOpenM = c.openM || 0;
     const openDate = openMToDate(cOpenM);
 
-    // Window ends at first subsequent curriculum with a DIFFERENT openM (or day after exam)
-    const nextDiff = active.slice(idx + 1).find(nc => (nc.openM || 0) !== cOpenM);
-    const windowEndDate = nextDiff
-      ? openMToDate(nextDiff.openM || 0)
-      : new Date(examDate.getTime() + 86400000);
+    let barStartDate, barEndDate;
+    if (S.target === '2차') {
+      // 순차: 이전 종료일과 개강일 중 늦은 날부터 시작
+      barStartDate = cursor && cursor > openDate ? cursor : openDate;
+      barEndDate   = new Date(barStartDate.getTime() + Math.ceil(c.effective / lpd) * 86400000);
+      cursor = barEndDate;
+    } else {
+      // 기존 윈도우 방식
+      const nextDiff = active.slice(idx + 1).find(nc => (nc.openM || 0) !== cOpenM);
+      const windowEndDate = nextDiff
+        ? openMToDate(nextDiff.openM || 0)
+        : new Date(examDate.getTime() + 86400000);
+      const windowDays = Math.max(1, Math.round((windowEndDate - openDate) / 86400000));
+      const windowCap  = windowDays * lpd;
+      barStartDate = openDate;
+      barEndDate   = windowCap >= c.effective
+        ? windowEndDate
+        : new Date(openDate.getTime() + Math.ceil(c.effective / lpd) * 86400000);
+    }
 
-    const windowDays = Math.max(1, Math.round((windowEndDate - openDate) / 86400000));
-    const windowCap  = windowDays * lpd;
-    const barEndDate = windowCap >= c.effective
-      ? windowEndDate
-      : new Date(openDate.getTime() + Math.ceil(c.effective / lpd) * 86400000);
-
-    const startDate = openDate < firstMonthDate ? firstMonthDate : openDate;
+    const startDate = barStartDate < firstMonthDate ? firstMonthDate : barStartDate;
     const leftFrac  = Math.max(0, dateToFrac(startDate));
     const rightFrac = Math.min(1, dateToFrac(barEndDate));
 
@@ -1571,10 +1566,14 @@ function renderCurriculum(p) {
   // Study path
   const included = result.filter(c => c.status !== 'skipped');
   const skipped  = result.filter(c => c.status === 'skipped');
-  const spCols   = included.length;
+  // 2차는 실제 학습 순서(openMKey→pri)로 정렬
+  const orderedIncluded = S.target === '2차'
+    ? [...included].sort((a, b) => openMKey(a.openM||0, p.examYear) - openMKey(b.openM||0, p.examYear) || a.pri - b.pri)
+    : included;
+  const spCols   = orderedIncluded.length;
   const spMinW   = spCols * 90;
   let pathHtml   = `<div class="study-path"><div class="sp-label">📖 실제 학습 순서</div><div class="sp-scroll"><div class="sp-items" style="grid-template-columns:repeat(${spCols},1fr);min-width:${spMinW}px;">`;
-  included.forEach(c => {
+  orderedIncluded.forEach(c => {
     const dispName = isDongCha ? c.name.replace(/\[(?:1|2)차\]/g, '') : c.name.replace(/<br>/g, ' ');
     pathHtml += `<div class="sp-tag"><span>${dispName}</span><span class="sp-lec">${c.status==='partial'?c.effective+'/':''}${c.needed}강</span></div>`;
   });
@@ -2079,16 +2078,6 @@ function buildMonthDaysPDF(mo, lpd, target) {
       dayMap.set(d, dayItems);
       if (is1차) { qi1 = qi; rem1 = rem; } else { qi2 = qi; rem2 = rem; }
     }
-  } else if (items.length > 1) {
-    // 2차 병행월: 매일 비례 분배
-    const totalPct = items.reduce((s, it) => s + it.pct, 0) || 100;
-    for (let d = startDay; d <= endDay; d++) {
-      const dow = new Date(year, m-1, d).getDay();
-      if (dow === 0 && target !== '2차') { dayMap.set(d, []); continue; }
-      dayMap.set(d, items.map(it => ({
-        name: it.name.replace(/<br>/g,''), lec: Math.max(1, Math.round(lpd * it.pct / totalPct)), cat: it.cat
-      })).filter(x => x.lec > 0));
-    }
   } else {
     queueDistribute(schedule || []);
   }
@@ -2280,10 +2269,14 @@ async function downloadPDF(btn) {
 
     // 실제 학습 순서
     const included = plan.result.filter(c => c.status !== 'skipped');
-    if (included.length > 0) {
+    // 2차는 실제 학습 순서(openMKey→pri)로 정렬
+    const orderedPdfIncluded = S.target === '2차'
+      ? [...included].sort((a, b) => openMKey(a.openM||0, plan.examYear) - openMKey(b.openM||0, plan.examYear) || a.pri - b.pri)
+      : included;
+    if (orderedPdfIncluded.length > 0) {
       const isDc = S.target === '동차';
       let pathInner = '';
-      included.forEach((c, i) => {
+      orderedPdfIncluded.forEach((c, i) => {
         const nm = isDc ? c.name.replace(/\[(?:1|2)차\]/g,'') : c.name.replace(/<br>/g,' ');
         const tagBg = (c.cat === '2차') ? '#ede9fe' : '#fff7ed';
         const tagBorder = (c.cat === '2차') ? '#7c3aed' : '#ea580c';
@@ -2292,7 +2285,7 @@ async function downloadPDF(btn) {
           <div style="font-size:10.5px;font-weight:700;color:${tagTxt};line-height:1.35;">${nm}</div>
           <div style="font-size:9.5px;color:#64748b;margin-top:2px;">${c.effective}강</div>
         </div>`;
-        if (i < included.length - 1) pathInner += '<div style="color:#22c55e;font-size:14px;flex-shrink:0;align-self:center;">→</div>';
+        if (i < orderedPdfIncluded.length - 1) pathInner += '<div style="color:#22c55e;font-size:14px;flex-shrink:0;align-self:center;">→</div>';
       });
       const pathSec = document.createElement('div');
       pathSec.style.cssText = 'padding:0 28px 14px;';
