@@ -297,20 +297,6 @@
     .gantt-bar:hover { filter: brightness(1.12); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
     .gantt-bar span { color: #fff; font-size: .68rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; text-shadow: 0 1px 2px rgba(0,0,0,.18); }
     #gantt-tooltip { position: fixed; z-index: 9999; background: #1c1917; color: #fff; padding: 6px 13px; border-radius: 8px; font-size: .78rem; font-weight: 600; pointer-events: none; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.3); white-space: nowrap; }
-    .mo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
-    .mo-card { border: 1px solid var(--gray-200); border-radius: 10px; overflow: hidden; }
-    .mo-head { background: var(--orange); color: #fff; padding: 9px 14px; font-weight: 700; font-size: .9rem; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    .mo-head.exam1-head { background: #7c3aed; }
-    .mo-head.exam2-head { background: #dc2626; }
-    .mo-body { padding: 12px 14px; }
-    .mo-meta { font-size: .76rem; color: var(--gray-500); margin-bottom: 4px; }
-    .mo-item { margin-top: 7px; }
-    .mo-item-label { display: flex; justify-content: space-between; font-size: .8rem; margin-bottom: 3px; }
-    .mo-item-label span:last-child { color: var(--orange); font-weight: 700; }
-    .pb-bg { background: var(--gray-200); border-radius: 3px; height: 6px; overflow: hidden; }
-    .pb { height: 100%; border-radius: 3px; background: var(--orange); }
-    .pb.pb2 { background: var(--purple); }
-    .mo-done { color: var(--green); font-weight: 600; font-size: .83rem; }
     .milestone-badge {
       display: inline-flex; align-items: center; gap: 4px;
       padding: 2px 8px; border-radius: 12px;
@@ -484,10 +470,6 @@
     <div class="card">
       <div class="results-header">📅 주간 학습 스케줄</div>
       <div id="week-table"></div>
-    </div>
-    <div class="card">
-      <div class="results-header">🗓️ 월별 학습 진도</div>
-      <div class="mo-grid" id="mo-grid"></div>
       <div style="text-align:center;margin-top:18px;">
         <button id="save-plan-btn" onclick="saveMyPlanWithFeedback(this)" style="
           background:var(--orange);color:#fff;border:none;border-radius:10px;
@@ -1374,7 +1356,6 @@ function generate() {
   renderGantt(p);
   renderCurriculum(p);
   renderWeekly(p);
-  renderMonthly(p);
 
   const el = document.getElementById('results');
   el.style.display = 'block';
@@ -1692,56 +1673,6 @@ function renderWeekly(p) {
 }
 
 /* ═══════════════ MONTHLY ═══════════════ */
-function renderMonthly(p) {
-  const { result, months, lpd } = p;
-  const examDate1 = S.target !== '2차' ? getExamDate('1차', S.year) : null;
-  const examDate2 = S.target !== '1차' ? getExamDate('2차', S.year) : null;
-  const isDongCha = S.target === '동차';
-
-  const BADGE_SHORT = {
-    '[1차]기본이론':'기본이론','[1차]핵심&문제풀이':'핵심&문제풀이','[2차]핵심이론':'핵심이론',
-    '[2차]단원별(객관식)':'단원별(객관식)','기본이론':'기본이론','핵심이론&<br>문제풀이':'핵심&문제풀이',
-    '핵심이론':'핵심이론','단원별<br>문제풀이(객관식)':'단원별(객관식)',
-  };
-
-  let html = '';
-  months.forEach(({ m, year: mYear, sd, ld, lec, contentLec, schedule }) => {
-    const mDate = new Date(mYear, m-1, 1);
-    const isExam1 = examDate1 && mDate.getMonth() === examDate1.getMonth() && mDate.getFullYear() === examDate1.getFullYear();
-    const isExam2 = examDate2 && mDate.getMonth() === examDate2.getMonth() && mDate.getFullYear() === examDate2.getFullYear();
-    const items = schedule || [];
-    const mainItem = items.find(it => !it.rev) || null;
-    const currItems = items.filter(it => !it.rev);
-    const badgeTxt = mainItem ? (BADGE_SHORT[mainItem.name] || mainItem.name) : '';
-    let headCls = 'mo-head';
-    if (isExam1 && isDongCha) headCls += ' exam1-head';
-    else if (isExam2) headCls += ' exam2-head';
-
-    html += `<div class="mo-card">
-      <div class="${headCls}">
-        <span>${m}월${mYear !== (S.year||2026) ? `<span style="font-size:.65rem;opacity:.7;margin-left:2px;">'${String(mYear).slice(2)}</span>` : ''}${isExam1&&isDongCha ? ' <span class="milestone-badge ms-1st">1차시험</span>' : ''}${isExam2 ? ' 🎯' : ''}${badgeTxt ? `<span style="font-size:.68rem;background:rgba(255,255,255,.25);padding:2px 6px;border-radius:10px;margin-left:6px;">${badgeTxt}</span>` : ''}</span>
-        <span style="font-size:.73rem;opacity:.8;flex-shrink:0;white-space:nowrap;margin-left:4px;">${isExam2 ? `시험 ${examDate2?.getDate()}일` : `${sd}일`}</span>
-      </div>
-      <div class="mo-body">
-        <div class="mo-meta">하루 ${lpd}강 × ${ld}일 = 약 ${lec}강</div>`;
-
-    if (currItems.length > 0) {
-      currItems.forEach(it => {
-        const is2nd = it.cat === '2차';
-        html += `<div class="mo-item">
-          <div class="mo-item-label"><span>${it.name}</span><span style="color:${is2nd?'var(--purple)':'var(--orange)'};">${it.pct}%</span></div>
-          <div class="pb-bg"><div class="pb${is2nd?' pb2':''}" style="width:${it.pct}%"></div></div>
-        </div>`;
-      });
-    } else {
-      html += `<div class="mo-done">✅ 전 커리큘럼 완료 · 최종 점검</div>`;
-    }
-    html += `</div></div>`;
-  });
-
-  document.getElementById('mo-grid').innerHTML = html;
-}
-
 /* ═══════════════ SAVE/LOAD ═══════════════ */
 function saveMyPlan() {
   localStorage.setItem(MY_PLAN_KEY, JSON.stringify({
