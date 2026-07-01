@@ -2177,7 +2177,7 @@ function buildMonthPageHTML(mo, lpd, quote, planInfo) {
   // 요일별 과목 배치 (0=일,1=월,...,6=토)
   const SUBJ_TMPL = {
     '1차': [null, '회계원리', '시설개론', '민법', '회계원리', '시설개론', '민법'],
-    '2차': [null, '관계법규', '관리실무', '관계법규', '관리실무', '관계법규', '관리실무'],
+    '2차': ['관계법규', '관계법규', '관리실무', '관계법규', '관리실무', '관계법규', '관리실무'],
     '동차': [null, '회계원리', '시설개론', '민법', '회계원리', '관계법규', '관리실무'],
   };
   const subjTpl = SUBJ_TMPL[target] || SUBJ_TMPL['동차'];
@@ -2236,7 +2236,7 @@ function buildMonthPageHTML(mo, lpd, quote, planInfo) {
       const isExam  = dn!==null && dn===examDay;
       let txt = '';
       if (isExam)           txt = '<span style="color:#dc2626;font-weight:700;">시험일</span>';
-      else if (!isSun && isStudy) txt = subjTpl[di] || '';
+      else if ((!isSun || target === '2차') && isStudy) txt = subjTpl[di] || '';
       r2 += `<td style="${tdBase}padding:8px 4px;font-size:11px;color:#374151;">${txt}</td>`;
     });
     r2 += '</tr>';
@@ -2248,7 +2248,7 @@ function buildMonthPageHTML(mo, lpd, quote, planInfo) {
       const isStudy = dn!==null && dn>=startDay && dn<=endDay;
       const isExam  = dn!==null && dn===examDay;
       let txt = '';
-      if (!isExam && isStudy) txt = isSun ? '복습/휴식' : getCurrLabel(dn, di);
+      if (!isExam && isStudy) txt = (isSun && target !== '2차') ? '복습/휴식' : getCurrLabel(dn, di);
       r3 += `<td style="${tdBase}padding:8px 4px;font-size:10.5px;color:#374151;">${txt}</td>`;
     });
     r3 += '</tr>';
