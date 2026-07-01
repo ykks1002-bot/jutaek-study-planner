@@ -523,8 +523,8 @@
 
 <script>
 /* ═══════════════ DATA ═══════════════ */
-const EXAM_1 = { 2026: new Date(2026,5,27), 2027: new Date(2027,5,28) };
-const EXAM_2 = { 2026: new Date(2026,8,19), 2027: new Date(2027,8,20) };
+const EXAM_1 = { 2026: new Date(2026,5,27), 2027: new Date(2027,5,26) };
+const EXAM_2 = { 2026: new Date(2026,8,19), 2027: new Date(2027,8,18) };
 const TODAY  = new Date();
 const MY_PLAN_KEY = 'jtm_my_plan';
 
@@ -1273,9 +1273,11 @@ function buildPlan() {
 
   while (curY < endY || (curY === endY && curM <= endM)) {
     const daysInM  = new Date(curY, curM, 0).getDate();
-    const startDay = (curM === startDate.getMonth()+1 && curY === startDate.getFullYear()) ? startDate.getDate() : 1;
-    const sd = daysInM - startDay + 1;
-    months.push({ m: curM, year: curY, sd, ld: sd, lec: sd * lpd });
+    const mStartDay = (curM === startDate.getMonth()+1 && curY === startDate.getFullYear()) ? startDate.getDate() : 1;
+    const isExamMonth = (curY === endY && curM === endM);
+    const mEndDay = isExamMonth ? examDate.getDate() - 1 : daysInM;
+    const sd = mEndDay - mStartDay + 1;
+    months.push({ m: curM, year: curY, sd, ld: sd, lec: sd * lpd, startDay: mStartDay, endDay: mEndDay });
     curM++;
     if (curM > 12) { curM = 1; curY++; }
   }
@@ -2010,17 +2012,18 @@ const STUDY_QUOTES = [
 
 // PDF 전용 일별 커리큘럼 분배 (target별 전략 분기)
 function buildMonthDaysPDF(mo, lpd, target) {
-  const { m, year, sd, lec, schedule } = mo;
+  const { m, year, sd, lec, contentLec, schedule } = mo;
   const daysInM = new Date(year, m, 0).getDate();
   const startDay = mo.startDay !== undefined ? mo.startDay : (daysInM - sd + 1);
   const endDay   = mo.endDay   !== undefined ? mo.endDay   : (startDay + sd - 1);
+  const queueLec = (contentLec && contentLec > 0) ? contentLec : lec;
   const dayMap   = new Map();
 
   // 非일요일 단일 큐 분배 (일요일은 빈 항목으로 처리)
   function queueDistribute(items) {
     const queue = [];
     items.forEach(it => {
-      const n = Math.round(it.pct / 100 * lec);
+      const n = Math.round(it.pct / 100 * queueLec);
       if (n > 0) queue.push({ name: it.name.replace(/<br>/g,'').replace(/\[(?:1|2)차\]/g,''), lec: n, cat: it.cat, rev: !!it.rev });
     });
     let qi = 0, rem = queue[0]?.lec || 0;
@@ -2048,7 +2051,7 @@ function buildMonthDaysPDF(mo, lpd, target) {
     // 1차/2차 별도 큐 - 요일별 track 매핑
     const q1 = [], q2 = [];
     (schedule || []).forEach(it => {
-      const n = Math.round(it.pct / 100 * lec);
+      const n = Math.round(it.pct / 100 * queueLec);
       if (n <= 0) return;
       const obj = { name: it.name.replace(/<br>/g,'').replace(/\[(?:1|2)차\]/g,''), lec: n, cat: it.cat };
       if (it.cat === '1차') q1.push(obj); else q2.push(obj);
